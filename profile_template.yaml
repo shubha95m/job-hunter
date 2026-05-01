@@ -1,0 +1,76 @@
+personal_info:
+  first_name: "Shubham"
+  last_name: "Sharma"
+  email: "shubham.sharma75319@gmail.com"
+  phone: "7014740870"
+  linkedin_url: "https://www.linkedin.com/in/shubham-sharma-4a4aaab9/"
+  github_url: "https://github.com/shubha95m"
+  portfolio_url: "https://shubha95m.github.io/shubham-sharma/resume.html?user=shubham&view=split&preview=true"
+  location: "Pune, India"
+
+professional_info:
+  headline: "Staff Software Engineer"
+  summary: "Staff SDET with 9.5 years of experience driving quality transformation and continuous testing for enterprise, cloud-native SaaS products across multi-region deployments (US, UK). Proven in scaling quality practices to support rapid product growth while minimizing test effort and operational cost through AI-driven test automation and intelligent quality workflows. \n Specialized in building org-wide QA platforms and shift-left strategies, with deep understanding of application behavior, microservices architecture, and service-level debugging. Leveraging AI tools (Claude, Cursor) to accelerate test development, code review, and debugging processes, significantly improving team velocity and code quality. Recognized for embedding quality engineering and test-driven development practices into engineering culture by combining automation, AI-assisted development, system design, and strong collaboration with backend and platform teams."
+  years_of_experience: 9.5
+
+skills:
+  - "Java"
+  - "Kotlin"
+  - "JavaScript"
+  - "Python"
+  - "Playwright"
+  - "Selenium"
+  - "Cypress"
+  - "RestAssured"
+  - "K6"
+  - "Testkube"
+  - "Jenkins"
+  - "Docker"
+  - "Kubernetes"
+  - "ArgoCD"
+  - "Allure"
+  - "TestNG"
+  - "AWS"
+  - "GCP"
+  - "Azure"
+  - "Maven"
+  - "GitLab CI"
+  - "Jira/Linear"
+  - "Microservices"
+  - "API Testing"
+  - "Automation Architect"
+  - "Agile"
+  - "CI/CD"
+  - "Performance Testing"
+  - "Shift-Left Testing"
+  - "Release Management"
+
+
+job_preferences:
+  keywords:
+    - "Automation QA"
+    - "Full Stack QA"
+    - "Staff QA"
+    - "Staff SDET"
+    - "Automation QA Lead"
+    - "QA Lead"
+    - "SDET Lead"
+    - "SDET"
+    - "QA Engineer"
+    - "Automation Engineer"
+    
+  locations:
+    - "Remote"
+    - "Hybrid"
+  remote_only: true
+  easy_apply_only: true
+
+standard_answers:
+  require_sponsorship: true
+  legally_authorized: true
+  veteran_status: "I am not a protected veteran"
+  disability_status: "No, I don't have a disability"
+  gender: "Male" # Male, Female, Decline to state
+  race: "Asian" # Male, Female, Decline to state
+
+resume_path: "Shubham_Sharma_Staff_SDET.pdf"
