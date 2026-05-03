@@ -58,6 +58,23 @@ job_preferences:
     - "SDET"
     - "QA Engineer"
     - "Automation Engineer"
+
+    
+    # AI-powered job title normalization
+    - "Quality Assurance Engineer"
+    - "QA Automation Engineer"
+    - "SDET Engineer"
+    - "Senior QA Engineer"
+    - "Lead QA Engineer"
+    - "QA Test Engineer"
+    - "Test Automation Engineer"
+    - "Software Development Engineer in Test"
+    - "QA Lead"
+    - "SDET Lead"
+    
+    # Generic but related terms (optional, use if you want broader matches)
+    - "Test Engineer"
+    - "Automation Engineer"
     
   locations:
     - "Remote"
@@ -71,6 +88,29 @@ standard_answers:
   veteran_status: "I am not a protected veteran"
   disability_status: "No, I don't have a disability"
   gender: "Male" # Male, Female, Decline to state
-  race: "Asian" # Male, Female, Decline to state
+  race: "Asian" # Asian, White, Black, Decline to state
+  
+  # Commonly asked general questions
+  highest_education: "Bachelor's Degree in Mechanical Engineering" # Bachelor's, Master's, etc.
+  has_bachelors_degree: true
+  willing_to_relocate: true 
+  willing_to_commute: false
+  notice_period: "1 month" 
+  expected_salary: "6500000 INR" 
+  current_salary: "5000000 INR" 
+  clearance_status: "No active clearance"
+  background_check_consent: true
+  english_proficiency: "Fluent / Professional"
+  start_immidiately: true
+
+# Many applications ask for exact years of experience for specific tools
+skill_experience_years:
+  "Java": 9
+  "Python": 5
+  "Automation Testing": 9
+  "Selenium": 9
+  "Playwright": 4
+  "API Testing": 9
+  "CI/CD": 7
 
 resume_path: "Shubham_Sharma_Staff_SDET.pdf"

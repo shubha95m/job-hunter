@@ -2,3 +2,5 @@ playwright
 pyyaml
 pydantic
 python-dotenv
+google-genai
+anthropic
