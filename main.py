@@ -7,8 +7,14 @@ from playwright.async_api import async_playwright, Page
 from browser import get_browser, get_context
 from agent import execute_smart_form_fill
 
-def load_profile(path="profile_template.yaml"):
-    with open(path, "r") as f:
+def load_profile():
+    profile_name = os.getenv("PROFILE", "shubham_profile")
+    profile_path = os.path.join("profiles", f"{profile_name}.yaml")
+    if not os.path.exists(profile_path):
+        print(f"ERROR: Profile not found at '{profile_path}'. Check your PROFILE setting in .env.")
+        raise FileNotFoundError(profile_path)
+    print(f"Loading profile: {profile_path}")
+    with open(profile_path, "r") as f:
         return yaml.safe_load(f)
 
 def load_applied_jobs(filepath="applied_jobs.txt"):

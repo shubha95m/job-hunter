@@ -24,3 +24,7 @@ env/
 # Logs
 *.log
 applied_jobs.txt
+
+# Personal profiles (contain PII — never commit personal ones)
+profiles/*.yaml
+!profiles/dummy_profile.yaml
