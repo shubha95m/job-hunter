@@ -5,12 +5,12 @@ personal_info:
   phone: "9999999999"
   linkedin_url: "https://www.linkedin.com/in/jane-doe/"
   github_url: "https://github.com/janedoe"
-  portfolio_url: ""
+  portfolio_url: "https://janedoe.dev"
   location: "Bangalore, India"
 
 professional_info:
   headline: "Senior Software Engineer"
-  summary: "Experienced software engineer with 7 years of experience in backend development using Java and Spring Boot. Passionate about building scalable, cloud-native microservices."
+  summary: "Experienced backend engineer with 7+ years of experience in distributed systems, Java, Spring Boot, and cloud microservices. Passionate about scalable system architecture and automated testing."
   years_of_experience: 7
 
 skills:
@@ -36,7 +36,7 @@ job_preferences:
     - "Remote"
     - "Bangalore"
   remote_only: false
-  easy_apply_only: true
+  easy_apply_only: false # Set to false to enable Phase 2 external company portals
 
 standard_answers:
   require_sponsorship: false
@@ -49,7 +49,7 @@ standard_answers:
   has_bachelors_degree: true
   willing_to_relocate: false
   willing_to_commute: false
-  notice_period: "2 months"
+  notice_period: "1 month"
   expected_salary: "3000000 INR"
   current_salary: "2200000 INR"
   clearance_status: "No active clearance"
@@ -66,3 +66,98 @@ skill_experience_years:
   "CI/CD": 5
 
 resume_path: "Jane_Doe_Backend_Engineer.pdf"
+resume_under1mb_path: "Jane_Doe_Backend_Engineer_1mb.pdf"
+
+# ==============================================================================
+# PHASE 2: External Company Portals (Workday, Greenhouse, Lever, Ashby, etc.)
+# ==============================================================================
+phase_2:
+  # Account Creation & Authentication (for portals requiring accounts, like Workday, Taleo, iCIMS)
+  account_credentials:
+    default_password: "DummyPassword@2026!" # Used when creating new candidate accounts on company portals
+    auto_create_account: true
+    security_questions:
+      mother_maiden_name: "Smith"
+      city_of_birth: "Bangalore"
+      favorite_pet: "Buddy"
+      first_school: "City School"
+      first_car: "Sedan"
+      favorite_color: "Blue"
+
+  # Detailed Address & Geography (Workday and enterprise ATS mandatory address fields)
+  address:
+    street_address_line1: "100 Innovation Boulevard"
+    street_address_line2: "Apt 201"
+    city: "Bangalore"
+    state_province: "Karnataka"
+    postal_code: "560100"
+    country: "India"
+    country_code: "+91"
+    citizenship_country: "India"
+
+  # Work Authorization & Visas
+  work_authorization:
+    authorized_in_india: true
+    authorized_in_us: false
+    requires_sponsorship: false
+    requires_future_sponsorship: false
+    has_valid_passport: true
+    security_clearance: "None"
+
+  # Education History (for structured degree input forms)
+  education_history:
+    - degree: "Bachelor of Technology"
+      field_of_study: "Computer Science and Engineering"
+      institution_name: "Example Institute of Technology"
+      institution_country: "India"
+      start_year: 2014
+      end_year: 2018
+      graduation_date: "2018-06"
+      gpa_or_percentage: "8.5 / 10"
+
+  # Employment History (for Workday 'My Experience' / experience forms)
+  employment_history:
+    - company_name: "Tech Solutions Ltd"
+      job_title: "Senior Backend Engineer"
+      start_date: "2021-07-01"
+      end_date: "Present"
+      is_current_job: true
+      location: "Bangalore, India"
+      description: "Architected high-throughput microservices using Spring Boot and Kafka on AWS."
+    - company_name: "Initial Tech Systems"
+      job_title: "Software Engineer"
+      start_date: "2018-07-01"
+      end_date: "2021-06-30"
+      is_current_job: false
+      location: "Bangalore, India"
+      description: "Developed and maintained RESTful services and automated test suites."
+
+  # Legal, Compliance & Company Disclosures
+  compliance_and_disclosures:
+    previously_worked_here: false
+    previously_applied_here: false
+    relatives_employed_here: false
+    is_former_government_official: false
+    has_non_compete_agreement: false
+    consent_background_check: true
+    consent_data_privacy_terms: true
+    agree_to_terms_and_conditions: true
+    electronic_signature: "Jane Doe"
+
+  # Equal Employment Opportunity & Voluntary Self-Identification
+  eeo_demographics:
+    gender: "Female" # Male, Female, Non-binary, Decline to state
+    race_ethnicity: "Asian"
+    veteran_status: "I am not a protected veteran"
+    disability_status: "No, I do not have a disability"
+
+  # Cover Letter & Additional Materials
+  cover_letter:
+    include_cover_letter: true
+    cover_letter_text: |
+      Dear Hiring Team,
+
+      I am writing to express my enthusiastic interest in this engineering role. With over 7 years of backend engineering and distributed systems experience, I look forward to contributing to your team's mission.
+
+      Sincerely,
+      Jane Doe

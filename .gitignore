@@ -29,3 +29,8 @@ applied_jobs.txt
 profiles/*.yaml
 !profiles/dummy_profile.yaml
 profile_template.yaml
+
+# Resumes and Documents (contain PII)
+*.pdf
+*.doc
+*.docx

@@ -9,6 +9,93 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# ==============================================================================
+# Model Pricing (USD per 1,000,000 tokens: input, output)
+# ==============================================================================
+MODEL_PRICING: dict[str, tuple[float, float]] = {
+    # Anthropic / Cursor Claude
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-3-5-sonnet": (3.00, 15.00),
+    "claude-3-7-sonnet": (3.00, 15.00),
+    "claude-3-5-haiku": (0.80, 4.00),
+    "claude-3-opus": (15.00, 75.00),
+    # Google Gemini
+    "gemini-3.8-flash": (0.075, 0.30),
+    "gemini-3.5-flash": (0.075, 0.30),
+    "gemini-flash": (0.075, 0.30),
+    "gemini-1.5-flash": (0.075, 0.30),
+    "gemini-1.5-pro": (1.25, 5.00),
+    "gemini-2.5-pro": (1.25, 5.00),
+    # OpenAI
+    "gpt-4o": (2.50, 10.00),
+    "gpt-4o-mini": (0.15, 0.60),
+    "o1": (15.00, 60.00),
+    "o3-mini": (1.10, 4.40),
+}
+
+
+class TokenCostTracker:
+    def __init__(self):
+        self.call_count = 0
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_tokens = 0
+        self.total_cost_usd = 0.0
+
+    def calculate_cost(self, model_name: str, prompt_tokens: int, completion_tokens: int) -> float:
+        model_lower = model_name.lower()
+        rates = (3.00, 15.00)  # default to Sonnet pricing
+        for key, r in MODEL_PRICING.items():
+            if key in model_lower:
+                rates = r
+                break
+        in_cost = (prompt_tokens / 1_000_000.0) * rates[0]
+        out_cost = (completion_tokens / 1_000_000.0) * rates[1]
+        return in_cost + out_cost
+
+    def record_call(
+        self, provider: str, model_name: str, prompt_tokens: int, completion_tokens: int
+    ) -> dict[str, Any]:
+        self.call_count += 1
+        total_tokens = prompt_tokens + completion_tokens
+        call_cost = self.calculate_cost(model_name, prompt_tokens, completion_tokens)
+
+        self.total_prompt_tokens += prompt_tokens
+        self.total_completion_tokens += completion_tokens
+        self.total_tokens += total_tokens
+        self.total_cost_usd += call_cost
+
+        print(
+            f"\n  [AI Cost & Tokens] Action Call #{self.call_count} | {provider.upper()} ({model_name})\n"
+            f"    Prompt Tokens: {prompt_tokens:,} | Completion: {completion_tokens:,} | Total: {total_tokens:,}\n"
+            f"    Cost this action: ${call_cost:.5f} | Cumulative Session Cost: ${self.total_cost_usd:.5f}"
+        )
+        return {
+            "call_number": self.call_count,
+            "provider": provider,
+            "model": model_name,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "cost": call_cost,
+            "cumulative_cost": self.total_cost_usd,
+        }
+
+    def print_summary(self) -> None:
+        print("\n=======================================================")
+        print("             AI SESSION TOKEN & COST SUMMARY")
+        print("=======================================================")
+        print(f"  Total AI Calls:             {self.call_count}")
+        print(f"  Prompt (Input) Tokens:      {self.total_prompt_tokens:,}")
+        print(f"  Completion (Output) Tokens: {self.total_completion_tokens:,}")
+        print(f"  Total Tokens Used:          {self.total_tokens:,}")
+        print(f"  Total Estimated Cost:       ${self.total_cost_usd:.5f} USD")
+        print("=======================================================\n")
+
+
+token_tracker = TokenCostTracker()
+
+
 async def generate_action(prompt: str) -> Optional[list[dict[str, Any]]]:
     """
     Calls the configured LLM and returns parsed JSON actions.
@@ -88,6 +175,12 @@ async def _call_cursor(prompt: str) -> Optional[list[dict[str, Any]]]:
                 resp.raise_for_status()
                 data = resp.json()
                 content = data["choices"][0]["message"]["content"]
+
+                usage = data.get("usage", {})
+                p_tokens = usage.get("prompt_tokens") or max(1, len(prompt) // 4)
+                c_tokens = usage.get("completion_tokens") or max(1, len(content) // 4)
+                token_tracker.record_call(provider="Cursor / OpenAI", model_name=model_name, prompt_tokens=p_tokens, completion_tokens=c_tokens)
+
                 return _parse_json_response(content.strip())
             except Exception as exc:
                 err_str = str(exc)
@@ -145,6 +238,15 @@ async def _call_cursor_cloud_agent(
                     status = run_data.get("status")
                     if status in ("FINISHED", "COMPLETED"):
                         result_text = run_data.get("result", "")
+                        usage = run_data.get("usage") or {}
+                        p_tokens = usage.get("prompt_tokens") or usage.get("input_tokens") or max(1, len(prompt) // 4)
+                        c_tokens = usage.get("completion_tokens") or usage.get("output_tokens") or max(1, len(result_text) // 4)
+                        token_tracker.record_call(
+                            provider="Cursor Cloud Agent",
+                            model_name=model_name,
+                            prompt_tokens=p_tokens,
+                            completion_tokens=c_tokens,
+                        )
                         break
                     elif status in ("FAILED", "CANCELLED"):
                         print(f"Cursor Cloud Agent Run {status}: {run_data.get('error') or run_data}")
@@ -167,8 +269,6 @@ async def _call_cursor_cloud_agent(
             return None
 
 
-
-
 async def _call_claude(prompt: str) -> Optional[list[dict[str, Any]]]:
     import anthropic
 
@@ -187,7 +287,12 @@ async def _call_claude(prompt: str) -> Optional[list[dict[str, Any]]]:
                 max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return _parse_json_response(response.content[0].text.strip())
+            content_text = response.content[0].text.strip()
+            p_tokens = getattr(response.usage, "input_tokens", None) or max(1, len(prompt) // 4)
+            c_tokens = getattr(response.usage, "output_tokens", None) or max(1, len(content_text) // 4)
+            token_tracker.record_call(provider="Anthropic Claude", model_name=model_name, prompt_tokens=p_tokens, completion_tokens=c_tokens)
+
+            return _parse_json_response(content_text)
         except Exception as exc:
             err_str = str(exc)
             if "authentication_error" in err_str or "invalid x-api-key" in err_str or "401" in err_str:
@@ -228,7 +333,18 @@ async def _call_gemini(prompt: str) -> Optional[list[dict[str, Any]]]:
                     model=current_model,
                     contents=prompt,
                 )
-                return _parse_json_response(response.text.strip())
+                text = response.text.strip()
+                usage = getattr(response, "usage_metadata", None)
+                if usage:
+                    p_tokens = getattr(usage, "prompt_token_count", None) or max(1, len(prompt) // 4)
+                    c_tokens = getattr(usage, "candidates_token_count", None) or max(1, len(text) // 4)
+                else:
+                    p_tokens = max(1, len(prompt) // 4)
+                    c_tokens = max(1, len(text) // 4)
+
+                token_tracker.record_call(provider="Google Gemini", model_name=current_model, prompt_tokens=p_tokens, completion_tokens=c_tokens)
+
+                return _parse_json_response(text)
             except Exception as exc:
                 err_str = str(exc).lower()
                 is_daily_quota = (
@@ -258,64 +374,47 @@ def _is_transient_error(exc: Exception) -> bool:
             "429",
             "rate",
             "resource_exhausted",
-            "503",
-            "unavailable",
-            "high demand",
+            "quota",
+            "too many requests",
             "overloaded",
-            "500",
-            "502",
-            "504",
-            "internal",
+            "503",
+            "service unavailable",
             "timeout",
-            "deadline",
         ]
     )
 
 
 def _retry_delay_seconds(exc: Exception, default: int = 5) -> int:
-    match = re.search(r"retryDelay.*?(\d+)", str(exc))
+    err_str = str(exc)
+    match = re.search(r"retry[- ]after[:\s]+(\d+)", err_str, re.IGNORECASE)
     if match:
-        delay = int(match.group(1)) + 2
-        # If the requested delay is longer than 25s (e.g., daily quota reset),
-        # return -1 so we don't stall execution and can switch models immediately.
-        if delay > 25:
-            return -1
-        return delay
+        return min(int(match.group(1)), 30)
+    match_s = re.search(r"wait\s+(\d+(?:\.\d+)?)\s*s", err_str, re.IGNORECASE)
+    if match_s:
+        return min(int(float(match_s.group(1))), 30)
     return default
 
 
-def _parse_json_response(text: str) -> Optional[list[dict[str, Any]]]:
-    json_text = _extract_json(text)
+def _parse_json_response(raw: str) -> Optional[list[dict[str, Any]]]:
+    raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$", "", raw.strip())
+
     try:
-        parsed = json.loads(json_text)
-    except json.JSONDecodeError as exc:
-        print(f"JSON Parsing Error: {exc}\nRaw Text: {text[:500]}")
-        return None
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            return [data]
+    except json.JSONDecodeError:
+        pass
 
-    if not isinstance(parsed, list):
-        print(f"JSON Schema Error: expected a list of actions, got {type(parsed).__name__}")
-        return None
+    match = re.search(r"\[.*\]", raw, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group(0))
+            if isinstance(data, list):
+                return data
+        except json.JSONDecodeError:
+            pass
 
-    valid_actions = []
-    for item in parsed:
-        if isinstance(item, dict) and isinstance(item.get("action"), str):
-            valid_actions.append(item)
-
-    if not valid_actions:
-        print("JSON Schema Error: response contained no valid actions.")
-        return None
-
-    return valid_actions
-
-
-def _extract_json(text: str) -> str:
-    stripped = text.strip()
-    if stripped.startswith("```json"):
-        return stripped.split("```json", 1)[1].split("```", 1)[0].strip()
-    if stripped.startswith("```"):
-        return stripped.split("```", 1)[1].split("```", 1)[0].strip()
-    if stripped.startswith("["):
-        return stripped
-
-    match = re.search(r"\[[\s\S]*\]", stripped)
-    return match.group(0) if match else stripped
+    return None
