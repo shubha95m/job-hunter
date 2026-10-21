@@ -24,6 +24,8 @@ env/
 # Logs
 *.log
 applied_jobs.txt
+applied_naukri_jobs.txt
+
 
 # Personal profiles (contain PII — never commit personal ones)
 profiles/*.yaml
