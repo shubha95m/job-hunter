@@ -201,11 +201,20 @@ async def send_dm(recipient: str, message: str) -> Dict[str, Any]:
             await page.goto(clean_url, wait_until="domcontentloaded", timeout=25000)
             await page.wait_for_timeout(3000)
             
-            msg_btn = page.locator("a[href*='/messaging/compose'], button:has-text('Message')").first
-            if await msg_btn.count() == 0:
-                raise RuntimeError(f"No direct Message button available for '{clean_url}'. They may not be a 1st-degree connection.")
-            await msg_btn.click(force=True)
-            await page.wait_for_timeout(2500)
+            compose_btn = page.locator("a[href*='/messaging/compose']").first
+            if await compose_btn.count() > 0:
+                compose_href = await compose_btn.get_attribute("href")
+                if compose_href:
+                    if not compose_href.startswith("http"):
+                        compose_href = "https://www.linkedin.com" + compose_href
+                    await page.goto(compose_href, wait_until="domcontentloaded", timeout=20000)
+                    await page.wait_for_timeout(2500)
+            else:
+                msg_btn = page.locator("button:has-text('Message'), button:has-text('Compose message')").first
+                if await msg_btn.count() == 0:
+                    raise RuntimeError(f"No direct Message button available for '{clean_url}'. They may not be a 1st-degree connection.")
+                await msg_btn.click(force=True)
+                await page.wait_for_timeout(2500)
         else:
             await page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=25000)
             await page.wait_for_timeout(3500)
@@ -221,15 +230,19 @@ async def send_dm(recipient: str, message: str) -> Dict[str, Any]:
                     await first_thread.click()
                     await page.wait_for_timeout(2000)
 
-        editor = page.locator("div.msg-form__contenteditable, div[role='textbox']").last
-        if await editor.count() == 0:
-            raise RuntimeError("Message composer editor could not be located.")
+        editor = page.locator("div.msg-form__contenteditable, div[role='textbox'][contenteditable='true']").last
+        try:
+            await editor.wait_for(state="visible", timeout=10000)
+        except Exception:
+            raise RuntimeError("Message composer editor could not be located or did not become visible in time.")
             
-        await editor.fill(message)
+        await editor.click()
+        await page.wait_for_timeout(500)
+        await page.keyboard.insert_text(message)
         await page.wait_for_timeout(1000)
         send_btn = page.locator("button.msg-form__send-button, button[type='submit']:has-text('Send')").last
         await send_btn.click(force=True)
-        await page.wait_for_timeout(2500)
+        await page.wait_for_timeout(3000)
         return {
             "status": "SUCCESS",
             "message": f"Direct message successfully dispatched to '{recipient}'."
