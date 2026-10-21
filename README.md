@@ -67,10 +67,20 @@ The automation workflow is cleanly separated into specialized modules:
 
 ## 🛠️ LinkedIn MCP Server Tools Overview
 
-The included Model Context Protocol server (`linkedin_mcp.py`) exposes 25+ tools to AI coding environments (e.g., Antigravity, Cursor, Claude Code):
+The included universal Model Context Protocol server (`mcp.py`) exposes 30+ tools and operating guideline resources to AI coding environments (e.g., Antigravity, Cursor, Claude Code):
+
+### MCP Operating Guidelines Resources
+AI agents connected to this MCP server can read standard resources for cross-platform workflows:
+- `guidelines://cross-platform-workflow` — Complete guide on combining Naukri job discovery with LinkedIn recruiter mapping and DMs.
+- `guidelines://outbound-dm-templates` — Proven cold outreach templates referencing job URLs from Naukri or LinkedIn.
+- `guidelines://platform-capabilities` — Capabilities matrix comparing Naukri Quick Apply vs LinkedIn member graph.
+
+### Tools Overview
 
 | Tool Name | Engine | Description |
 |---|---|---|
+| `search_cross_platform_jobs` | Naukri + LinkedIn | Aggregates jobs from both platforms, tags origin (`[Platform: Naukri]` / `[Platform: LinkedIn]`), maps LinkedIn recruiters for each company, and provides pre-drafted DMs. |
+| `draft_recruiter_pitch` | Local Engine | Generates tailored outreach pitches for recruiters citing specific job URLs and platform origins. |
 | `get_intro` | Voyager API | Returns full name, headline, vanity URL, and occupation. |
 | `get_about` | Voyager API | Fetches profile about/summary section. |
 | `get_experience` | Voyager API | Lists all work experiences, company names, titles, and dates. |
@@ -89,13 +99,14 @@ The included Model Context Protocol server (`linkedin_mcp.py`) exposes 25+ tools
 | `send_dm` | Playwright | Sends direct messages *(requires user confirmation)*. |
 | `connect_with_person` | Playwright | Dispatches connection requests with custom notes *(requires confirmation)*. |
 | `create_post` | Playwright | Publishes a LinkedIn feed post *(requires confirmation)*. |
-| `naukri_get_profile` | Playwright | Diagnostic check of Naukri session state and cookies. |
+| `naukri_get_profile` | Playwright | Diagnostic check of Naukri session state and live candidate profile details. |
 | `naukri_search_jobs` | Playwright | Searches jobs on Naukri and returns structured cards with Quick Apply status. |
 | `naukri_search_recruiters` | Playwright | Discovers recruiters hiring on Naukri for target companies. |
 | `naukri_update_headline` | Playwright | Updates candidate resume headline on Naukri *(requires confirmation)*. |
 | `naukri_quick_apply` | Playwright | Submits Phase 1 Quick Apply applications on Naukri *(requires confirmation)*. |
 
 > **Safety Guard:** Any mutating or communication action (`send_dm`, `connect_with_person`, `create_post`, `update_*`, `naukri_update_headline`, `naukri_quick_apply`) strictly requires `confirmed=True` to prevent accidental actions.
+
 
 
 ---

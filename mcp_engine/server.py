@@ -35,7 +35,102 @@ STATE_FILE = get_state_file("linkedin")
 DEFAULT_CV_PATH = Path(os.getenv("DEFAULT_CV_PATH", str(BASE_DIR / "cv-content")))
 
 _naukri_client = NaukriAPIClient()
-mcp = MCPServer("job-hunter-mcp")
+
+SERVER_INSTRUCTIONS = """Universal Multi-Platform Job Hunter & Recruiter Intelligence Server.
+
+Core Operating Principles & Cross-Platform Synergy:
+1. Multi-Platform Awareness:
+   - Always state the platform source for every job opportunity ([Platform: Naukri] or [Platform: LinkedIn]).
+   - Always include the exact, clickable URL for every job posting.
+
+2. Cross-Platform Recruiter Mapping:
+   - Naukri has vast in-platform tech job inventory and 1-click Quick Apply in India/remote, but masks recruiter profiles for enterprise companies.
+   - LinkedIn has a rich member directory and direct messaging (InMail/DM/connect).
+   - Whenever a job is found on Naukri (or an external ATS) and the user wants to identify or contact the recruiter:
+     Map that company to LinkedIn using search_people_at_company(company_name=..., role_keyword='Recruiter') or search_recruiters(company=...).
+
+3. Direct Outreach & Messaging:
+   - When reaching out to a recruiter or hiring manager regarding ANY job (whether found on Naukri or LinkedIn):
+     Use send_dm or connect_with_person on LinkedIn.
+     Reference the specific role, platform source, and job URL in the message.
+   - STRICT SAFETY GUARD: Never send messages, connection requests, or modify profiles without user confirmation (confirmed=True). Always show the draft to the user first.
+"""
+
+mcp = MCPServer("job-hunter-mcp", instructions=SERVER_INSTRUCTIONS)
+
+
+# ==============================================================================
+# Guidelines Resources (Agent Operating SOPs)
+# ==============================================================================
+
+@mcp.resource("guidelines://cross-platform-workflow", name="Cross-Platform Recruiter Workflow", description="Guidelines on combining Naukri jobs with LinkedIn recruiter discovery and outreach DMs")
+def get_cross_platform_workflow() -> str:
+    """Guidelines explaining how to discover jobs on Naukri, map recruiters on LinkedIn, and send targeted DMs."""
+    return """# Cross-Platform Recruiter & Job Hunting Workflow Guidelines
+
+## 1. The Strategy: The Best of Both Platforms
+- **Naukri**: Ideal for high-speed job discovery in India and Remote, and 1-click Quick Apply. Modern enterprise tech companies on Naukri post through centralized corporate ATS accounts with masked recruiter identities.
+- **LinkedIn**: The global standard for professional networking, direct recruiter discovery, and outbound messaging (DMs & Connection Requests).
+
+## 2. Standard Operating Procedure for Job Queries:
+When a candidate asks to find jobs, recruiters, or outreach contacts:
+1. **Discover Jobs Across Platforms**:
+   - Query Naukri (`naukri_search_jobs` or `search_cross_platform_jobs`) for local/remote high-volume openings.
+   - Query LinkedIn (`search_jobs`) for global and corporate requisitions.
+   - **MANDATORY**: Always prefix every opportunity with its origin: `[Platform: Naukri]` or `[Platform: LinkedIn]` followed by the clean, clickable URL.
+
+2. **Map Recruiters on LinkedIn for Naukri Jobs**:
+   - For every company identified on Naukri, query LinkedIn using:
+     - `search_people_at_company(company_name="...", role_keyword="Recruiter")`
+     - OR `search_recruiters(company="...")`
+   - Retrieve the exact named Talent Acquisition Partner, Technical Recruiter, or Engineering Manager.
+
+3. **Draft & Dispatch Outbound DMs via LinkedIn**:
+   - Use `draft_recruiter_pitch(job_title=..., company=..., job_url=..., platform=...)` to generate a personalized message citing the candidate's Staff SDET background and the exact job link.
+   - Dispatch via `send_dm` (for 1st-degree connections) or `connect_with_person` (with a custom note) on LinkedIn.
+   - **Safety First**: NEVER dispatch DMs or connection notes without explicit user approval (`confirmed=True`). Always present the proposed message to the user first.
+"""
+
+
+@mcp.resource("guidelines://outbound-dm-templates", name="Outbound Recruiter DM Templates", description="High-impact cold outreach templates referencing job URLs from Naukri or LinkedIn")
+def get_outbound_dm_templates() -> str:
+    """Pre-crafted outreach message templates for recruiters referencing job postings."""
+    return """# High-Impact Recruiter Outreach Templates
+
+## Template 1: Connection Request Note (under 300 characters)
+"Hi {recruiter_name}, I came across the {role_title} opening at {company} ({platform}: {job_url}). With ~10 yrs leading QA/SDET ecosystems (Playwright, Java/Python, Cloud, AI testing), I'd love to connect and explore how I can support your engineering goals!"
+
+## Template 2: Direct Message (DM / InMail)
+"Hi {recruiter_name},
+
+I hope you're having a productive week!
+
+I noticed that {company} is actively hiring for a {role_title} on {platform} ({job_url}). 
+
+Given my background as a Staff SDET / QA Lead with nearly a decade of experience architecting resilient test automation frameworks across distributed microservices (Playwright, Python, Java, AWS/GCP, and AI-assisted QA), I believe my experience strongly aligns with your team's quality and scalability goals.
+
+I'd welcome the opportunity to share my resume and discuss how my expertise can drive impact for {company}.
+
+Best regards,
+Shubham Kumar Sharma
+Portfolio: https://shubha95m.github.io/shubham-sharma/resume.html"
+"""
+
+
+@mcp.resource("guidelines://platform-capabilities", name="Platform Capabilities & Strengths", description="Comparison of Naukri Quick Apply vs LinkedIn Graph and direct messaging")
+def get_platform_capabilities() -> str:
+    """Capabilities matrix comparing Naukri and LinkedIn for job search, applications, and messaging."""
+    return """# Platform Capabilities Matrix
+
+| Feature | Naukri | LinkedIn | Recommended MCP Flow |
+|---|---|---|---|
+| **Job Search Coverage** | High (India, Remote, GCC) | High (Global, MNCs, Startups) | Query both using `search_cross_platform_jobs` |
+| **In-Platform Apply** | 1-Click Quick Apply (`naukri_quick_apply`) | Multi-Step Easy Apply (`platforms/linkedin/easy_apply`) | Run autonomously in background |
+| **Recruiter Discovery** | Masked / Department Level | Named Members & Talent Partners | Discover on LinkedIn using `search_people_at_company` |
+| **Direct Messaging** | Recruiter Chat (Inbound only) | Outbound DMs & Connection Notes | Send outbound messages via LinkedIn (`send_dm`) |
+| **Attribution** | `[Platform: Naukri]` + URL | `[Platform: LinkedIn]` + URL | Always clearly display to candidate |
+"""
+
 
 
 
@@ -789,4 +884,153 @@ def naukri_quick_apply(keywords: str = "Automation QA", max_apps: int = 5, confi
         }, indent=2)
     except Exception as e:
         return f"Error running Naukri quick apply: {str(e)}"
+
+
+# ==============================================================================
+# 18. Unified Cross-Platform Orchestration Tools
+# ==============================================================================
+
+@mcp.tool()
+def search_cross_platform_jobs(
+    role_keywords: str = "Staff SDET",
+    location: str = "India",
+    company: Optional[str] = None,
+    platforms: str = "all",
+    map_recruiters: bool = True,
+    limit_per_platform: int = 5
+) -> str:
+    """
+    [READ-ONLY] Unified Cross-Platform Job Hunter & Recruiter Intelligence.
+    Searches jobs on Naukri and LinkedIn, maps active recruiters on LinkedIn for each company,
+    and returns rich dossiers tagged with [Platform: Naukri] or [Platform: LinkedIn] plus direct URLs.
+    """
+    async def _execute():
+        aggregated_jobs = []
+        companies_seen = []
+
+        # 1. Search Naukri
+        if platforms.lower() in ("naukri", "all"):
+            try:
+                n_jobs = await _naukri_client.search_jobs(keywords=role_keywords, location=location, limit=limit_per_platform)
+                for j in n_jobs:
+                    comp = j.get("company", "Unknown Company")
+                    title = j.get("title", role_keywords)
+                    slug = comp.lower().replace(" ", "-").replace(".", "")
+                    clean_url = f"https://www.naukri.com/{slug}-jobs"
+                    aggregated_jobs.append({
+                        "title": title,
+                        "company": comp,
+                        "platform": "NAUKRI",
+                        "platform_tag": "[Platform: Naukri]",
+                        "job_url": clean_url,
+                        "location": j.get("location", location),
+                        "experience": j.get("experience", ""),
+                        "apply_type": "Quick Apply" if j.get("is_quick_apply") else "External Portal"
+                    })
+                    if comp not in companies_seen:
+                        companies_seen.append(comp)
+            except Exception as e:
+                print(f"Error fetching Naukri jobs: {e}")
+
+        # 2. Search LinkedIn
+        if platforms.lower() in ("linkedin", "all"):
+            try:
+                l_jobs = await linkedin_dom.search_jobs(
+                    keywords=role_keywords,
+                    location=location,
+                    company=company,
+                    limit=limit_per_platform
+                )
+                for j in l_jobs:
+                    comp = j.get("company", "Unknown Company")
+                    aggregated_jobs.append({
+                        "title": j.get("title", role_keywords),
+                        "company": comp,
+                        "platform": "LINKEDIN",
+                        "platform_tag": "[Platform: LinkedIn]",
+                        "job_url": j.get("job_url", ""),
+                        "location": j.get("location", location),
+                        "experience": "",
+                        "apply_type": "Easy Apply" if j.get("easy_apply") else "External Portal"
+                    })
+                    if comp not in companies_seen:
+                        companies_seen.append(comp)
+            except Exception as e:
+                print(f"Error fetching LinkedIn jobs: {e}")
+
+        # 3. Map LinkedIn Recruiters for top target companies
+        company_recruiters = {}
+        if map_recruiters:
+            for comp in companies_seen[:2]:
+                try:
+                    recs = await linkedin_dom.search_people_at_company(company_name=comp, role_keyword="Recruiter", limit=2)
+                    company_recruiters[comp] = recs
+                except Exception:
+                    company_recruiters[comp] = []
+
+        # Attach recruiters and pre-drafted pitch
+        for job in aggregated_jobs:
+            c_name = job["company"]
+            job["linked_recruiters_on_linkedin"] = company_recruiters.get(c_name, [])
+            first_rec = job["linked_recruiters_on_linkedin"][0]["name"] if job["linked_recruiters_on_linkedin"] else "Hiring Team"
+            job["suggested_dm_pitch"] = (
+                f"Hi {first_rec}, I spotted the {job['title']} opening at {c_name} ({job['platform_tag']}: {job['job_url']}). "
+                f"With ~10 yrs architecting QA/SDET automation (Playwright, Python, Cloud, AI testing), I'd love to connect and explore how I can support your goals!"
+            )
+
+        return json.dumps({
+            "query": role_keywords,
+            "location": location,
+            "total_cross_platform_jobs": len(aggregated_jobs),
+            "jobs": aggregated_jobs
+        }, indent=2)
+
+    try:
+        return asyncio.run(_execute())
+    except Exception as e:
+        return f"Error executing cross-platform search: {str(e)}"
+
+
+
+@mcp.tool()
+def draft_recruiter_pitch(
+    job_title: str,
+    company: str,
+    job_url: str,
+    platform: str = "Naukri",
+    recruiter_name: Optional[str] = None
+) -> str:
+    """
+    [READ-ONLY] Generate a tailored, executive outbound message for a recruiter citing a specific job URL and platform.
+    Can be used directly with send_dm or connect_with_person upon user confirmation.
+    """
+    rec_greeting = f"Hi {recruiter_name}" if recruiter_name else "Hello"
+    short_note = (
+        f"{rec_greeting}, I came across the {job_title} opening at {company} ([Platform: {platform}]: {job_url}). "
+        f"With ~10 yrs leading QA/SDET ecosystems (Playwright, Java/Python, Cloud, AI testing), I'd love to connect and explore synergy!"
+    )
+
+    full_dm = f"""{rec_greeting},
+
+I hope you're having a productive week!
+
+I noticed that {company} is actively hiring for a {job_title} ([Platform: {platform}]: {job_url}).
+
+Given my background as a Staff SDET / QA Lead with nearly a decade of experience spearheading automated test ecosystems across complex microservices (Playwright, Python, Java/Kotlin, AWS/GCP, and AI-assisted QA), I believe my experience strongly aligns with your team's quality and release velocity goals.
+
+I'd welcome the opportunity to share my resume and discuss how my expertise can drive impact for {company}.
+
+Best regards,
+Shubham Kumar Sharma
+Portfolio: https://shubha95m.github.io/shubham-sharma/resume.html"""
+
+    return json.dumps({
+        "company": company,
+        "job_title": job_title,
+        "platform_tag": f"[Platform: {platform}]",
+        "job_url": job_url,
+        "connection_request_note_300chars": short_note[:299],
+        "full_direct_message": full_dm
+    }, indent=2)
+
 
