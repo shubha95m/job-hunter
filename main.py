@@ -3,17 +3,19 @@ import asyncio
 import yaml
 import urllib.parse
 from datetime import datetime
-from playwright.async_api import async_playwright, Page
+from playwright.async_api import async_playwright, Page, BrowserContext
 from dotenv import load_dotenv
 from browser import get_browser, get_context, save_state
 from agent import execute_smart_form_fill, get_easy_apply_modal
+from external_portal_agent import execute_external_portal_apply
+from llm_wrapper import token_tracker
 
 load_dotenv()
 
 JOB_TIMEOUT_SECONDS = int(os.getenv("JOB_TIMEOUT_SECONDS", "240"))
 
 def load_profile():
-    profile_name = os.getenv("PROFILE", "shubham_profile")
+    profile_name = os.getenv("PROFILE", "dummy_profile")
     profile_path = os.path.join("profiles", f"{profile_name}.yaml")
     if not os.path.exists(profile_path):
         print(f"ERROR: Profile not found at '{profile_path}'. Check your PROFILE setting in .env.")
@@ -36,18 +38,19 @@ def save_applied_job(job_url, filepath="applied_jobs.txt"):
     with open(filepath, "a") as f:
         f.write(f"{job_url} | {timestamp}\n")
 
-def build_search_url(keywords, locations):
+def build_search_url(keywords, locations, easy_apply_only=False):
     base_url = "https://www.linkedin.com/jobs/search/?"
     keyword_str = urllib.parse.quote(" ".join(keywords))
     location_str = urllib.parse.quote(locations[0])
     
     # f_AL=true  = Easy Apply only
-    # f_I=96,4,556 = IT Services & Consulting, Software Development, Technology & Information
-    # f_CF=f_AL  = Combined filter: Easy Apply within the IT category
     params = (
         f"keywords={keyword_str}"
         f"&location={location_str}"
-        f"&f_AL=true"
+    )
+    if easy_apply_only:
+        params += "&f_AL=true"
+    params += (
         f"&f_I=96%2C4%2C556%2C6"   # IT Services, Software Dev, Tech & Info, Computer Hardware
         f"&f_WT=2%2C3%2C4"          # Work type: Remote (2), Hybrid (3), On-site (4) — keeps all
     )
@@ -67,7 +70,7 @@ def is_job_relevant(job_title: str, profile: dict) -> bool:
     
     return any(kw.lower() in title_lower for kw in keywords)
 
-async def process_job(page: Page, job_url: str, profile: dict):
+async def process_job(page: Page, job_url: str, profile: dict, context: BrowserContext = None):
     print(f"\nProcessing job: {job_url}")
     await page.goto(job_url, wait_until="domcontentloaded")
     await asyncio.sleep(2)  # Give dynamic scripts / hydration a moment to attach
@@ -86,21 +89,36 @@ async def process_job(page: Page, job_url: str, profile: dict):
     if job_title:
         print(f"  Job title: '{job_title}' — relevant, proceeding.")
     
-    # Check for Easy Apply button
+    # --- Step 1: Wait for top-card buttons and sense whether Easy Apply, External Portal, or Already Applied ---
     try:
+        try:
+            await page.wait_for_selector(
+                "button:has-text('Easy Apply'), [aria-label*='Easy Apply' i], [aria-label*='Apply on company website' i], a[href*='/safety/go/'], a:has-text('Apply'), button:has-text('Applied')",
+                timeout=5000
+            )
+        except Exception:
+            pass
+
+        # Check if already applied on LinkedIn
+        already_applied_loc = page.locator(
+            "button:has-text('Applied'), "
+            "[aria-label*='Applied' i], "
+            ".jobs-s-apply__applied-update"
+        ).first
+        if await already_applied_loc.count() > 0 and await already_applied_loc.is_visible():
+            print("  [Sense] Job is already marked as 'Applied' on LinkedIn.")
+            return True
+
+        # Strictly match Easy Apply buttons
         easy_apply_locator = page.locator(
-            "button.jobs-apply-button, "
             "button:has-text('Easy Apply'), "
             "[aria-label*='Easy Apply' i]"
         ).first
         
-        try:
-            await easy_apply_locator.wait_for(state="visible", timeout=6000)
-        except Exception:
-            pass
+        is_easy_apply = await easy_apply_locator.is_visible()
         
-        if await easy_apply_locator.is_visible():
-            print("Found Easy Apply button. Clicking...")
+        if is_easy_apply:
+            print("  [Sense] Identified as LinkedIn Easy Apply job -> Routing to Phase 1 (In-Modal Agent)...")
             clicked = False
             for attempt in range(3):
                 try:
@@ -126,16 +144,72 @@ async def process_job(page: Page, job_url: str, profile: dict):
             
             await asyncio.sleep(1.5)  # Wait for modal animation and footer buttons to mount
 
-            # AI Agent takes over here
-            print("Form opened. Handing over to Smart AI Agent.")
+            # Phase 1: Smart Form Filling within LinkedIn modal
+            print("Form opened. Handing over to Smart AI Agent (Phase 1).")
             success = await execute_smart_form_fill(page, profile)
             return success
         else:
-            print("No Easy Apply button found on this job.")
-            return False
+            # Strictly match External Apply buttons (leading to company portals)
+            external_apply_btn = page.locator(
+                "[aria-label*='Apply on company website' i], "
+                "a[href*='/safety/go/'], "
+                "a[href*='/jobs/view/externalApply'], "
+                "a:has-text('Apply'):not(:has-text('Easy Apply')), "
+                "button:has-text('Apply'):not(:has-text('Easy Apply')), "
+                "button:has-text('Apply on company website'), "
+                "a:has-text('Apply on company website'), "
+                "a[aria-label*='Apply' i]:not([aria-label*='Easy Apply' i]), "
+                "button[aria-label*='Apply' i]:not([aria-label*='Easy Apply' i])"
+            ).first
+
+            is_external_apply = await external_apply_btn.is_visible()
+
+            if is_external_apply:
+                print("  [Sense] Identified as Company Portal job -> Routing to Phase 2 (External Portal Agent)...")
+                external_page = None
+                try:
+                    if context:
+                        async with context.expect_page(timeout=12000) as page_info:
+                            await external_apply_btn.click(timeout=5000)
+                        external_page = await page_info.value
+                    else:
+                        await external_apply_btn.click(timeout=5000)
+                except Exception:
+                    # Handle LinkedIn redirect confirmation modal if it appears
+                    continue_btn = page.locator("button:has-text('Continue'), a:has-text('Continue')").first
+                    if await continue_btn.is_visible() and context:
+                        try:
+                            async with context.expect_page(timeout=10000) as page_info:
+                                await continue_btn.click(timeout=5000)
+                            external_page = await page_info.value
+                        except Exception:
+                            pass
+
+
+                if external_page:
+                    print(f"  External portal tab opened: {external_page.url}")
+                    try:
+                        await external_page.wait_for_load_state("domcontentloaded", timeout=15000)
+                        await asyncio.sleep(2)
+                        # Phase 2: Full-Page External Portal Agent
+                        success = await execute_external_portal_apply(external_page, profile, job_title)
+                        return success
+                    finally:
+                        try:
+                            await external_page.close()
+                        except Exception:
+                            pass
+                else:
+                    print("Could not open or capture external company portal page.")
+                    return False
+            else:
+                print("  [Sense] No apply button available on this job (expired, already applied, or not accepting applications).")
+                return False
+
     except Exception as e:
-        print(f"Error or timeout finding Easy Apply button: {e}")
+        print(f"Error or timeout finding Apply button: {e}")
         return False
+
 
 async def has_valid_linkedin_session(page: Page) -> bool:
     """Detect expired auth before starting the job loop."""
@@ -201,8 +275,9 @@ async def main():
         print("Error: Keywords and locations must be defined in profile.")
         return
 
-    search_url = build_search_url(keywords, locations)
-    print(f"Search URL: {search_url}")
+    easy_apply_only = profile.get("job_preferences", {}).get("easy_apply_only", False)
+    search_url = build_search_url(keywords, locations, easy_apply_only=easy_apply_only)
+    print(f"Search URL: {search_url} (Easy Apply Only: {easy_apply_only})")
     
     async with async_playwright() as p:
         browser = await get_browser(p, headless=False)
@@ -278,9 +353,10 @@ async def main():
             success = False
             try:
                 success = await asyncio.wait_for(
-                    process_job(page, link, profile),
+                    process_job(page, link, profile, context=context),
                     timeout=JOB_TIMEOUT_SECONDS,
                 )
+
                 if not success:
                     await dismiss_easy_apply_modal(page)
             except asyncio.TimeoutError:
@@ -304,7 +380,9 @@ async def main():
         for job in successful_jobs:
             print(f" - {job}")
         print("=================================\n")
-            
+
+        token_tracker.print_summary()
+
         await save_state(context)
         await browser.close()
 
