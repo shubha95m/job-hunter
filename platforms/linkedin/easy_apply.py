@@ -339,22 +339,137 @@ def primary_progression_action(context: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+def resolve_rule_based_actions(context: dict[str, Any], profile: dict[str, Any]) -> list[dict[str, Any]]:
+    actions = []
+    standard_answers = profile.get("standard_answers", {})
+    prof_info = profile.get("professional_info", {})
+    personal_info = profile.get("personal_info", {})
+
+    fields = context.get("fields", [])
+    for field in fields:
+        field_id = field.get("id")
+        selector = field.get("selector")
+        target_key = "id" if field_id else "selector"
+        target_val = field_id or selector
+        if not target_val:
+            continue
+
+        ftype = str(field.get("type", "")).lower()
+        tag = str(field.get("tag", "")).lower()
+        label = (field.get("label") or "").lower()
+        val = str(field.get("value") or "").strip()
+        required = field.get("required", False)
+
+        # 1. File Upload Dropzone
+        if ftype == "file":
+            resume_path = profile.get("resume_path") or "resume.pdf"
+            actions.append({"action": "upload", target_key: target_val, "path": resume_path})
+            continue
+
+        # 2. Dropdown / Select
+        if tag == "select" or ftype == "select":
+            options = field.get("options", [])
+            if val and val.lower() not in ["select an option", "select", "choose", ""]:
+                continue
+            
+            chosen_option = None
+            opt_texts = [str(o).strip() for o in options]
+            
+            if any(k in label for k in ["country code", "phone country", "phone code"]):
+                for o in opt_texts:
+                    if "+91" in o or "india" in o.lower():
+                        chosen_option = o
+                        break
+            elif any(k in label for k in ["country", "citizenship", "nationality"]):
+                for o in opt_texts:
+                    if o.lower() == "india" or "united states" in o.lower():
+                        chosen_option = o
+                        break
+            elif any(o.lower() == "yes" for o in opt_texts) and any(o.lower() == "no" for o in opt_texts):
+                if any(k in label for k in ["sponsorship", "require visa", "require sponsorship"]):
+                    need_sponsor = standard_answers.get("require_sponsorship", True)
+                    chosen_option = "Yes" if need_sponsor else "No"
+                elif any(k in label for k in ["disability", "disabled"]):
+                    chosen_option = "No"
+                elif any(k in label for k in ["veteran"]):
+                    chosen_option = "No"
+                else:
+                    chosen_option = "Yes"
+            elif any(k in label for k in ["gender", "sex"]):
+                chosen_option = "Male" if "Male" in opt_texts else opt_texts[1] if len(opt_texts) > 1 else None
+            elif any(k in label for k in ["notice", "period"]):
+                for o in opt_texts:
+                    if any(x in o.lower() for x in ["30", "1 month", "immediate", "less than"]):
+                        chosen_option = o
+                        break
+            
+            if not chosen_option and len(opt_texts) > 1:
+                for o in opt_texts[1:]:
+                    if o.lower() not in ["select an option", "select", "choose", ""]:
+                        chosen_option = o
+                        break
+
+            if chosen_option:
+                actions.append({"action": "select", target_key: target_val, "value": chosen_option})
+            continue
+
+        # 3. Text / Numeric / Textarea inputs
+        if ftype in ["text", "number", "tel", "email"] or tag == "textarea":
+            if val:
+                continue
+
+            answer_val = None
+            if any(k in label for k in ["experience", "years", "how many years"]):
+                answer_val = str(int(prof_info.get("years_of_experience", 10)))
+            elif any(k in label for k in ["notice", "period", "days"]):
+                answer_val = str(prof_info.get("notice_period_days", 30))
+            elif any(k in label for k in ["ctc", "salary", "compensation", "current"]):
+                answer_val = str(prof_info.get("current_ctc", "Not Disclosed"))
+            elif any(k in label for k in ["expected", "desired ctc"]):
+                answer_val = str(prof_info.get("expected_ctc", "Negotiable"))
+            elif any(k in label for k in ["city", "location", "address"]):
+                answer_val = personal_info.get("city", "Pune")
+            elif any(k in label for k in ["phone", "mobile"]):
+                answer_val = personal_info.get("phone", "")
+            elif any(k in label for k in ["portfolio", "website", "github", "link"]):
+                answer_val = personal_info.get("portfolio_url", "")
+            elif required or field.get("error"):
+                answer_val = "10" if "year" in label or "number" in ftype else "Yes"
+
+            if answer_val is not None:
+                actions.append({"action": "fill", target_key: target_val, "value": answer_val})
+            continue
+
+        # 4. Radio Buttons
+        if ftype == "radio":
+            if field.get("checked"):
+                continue
+            if "yes" in label or "authorized" in label:
+                actions.append({"action": "check", target_key: target_val})
+            elif "no" in label and any(k in label for k in ["disability", "veteran"]):
+                actions.append({"action": "check", target_key: target_val})
+
+        # 5. Checkbox (disclosures / consent)
+        if ftype == "checkbox":
+            if not field.get("checked"):
+                actions.append({"action": "check", target_key: target_val})
+
+    # Always append next progression action (Next / Review / Submit)
+    prog = primary_progression_action(context)
+    if prog:
+        actions.extend(prog)
+
+    return actions
+
+
 async def decide_next_actions(context: dict[str, Any], profile: dict[str, Any]) -> list[dict[str, Any]]:
-    if not has_fields_needing_input(context):
-        fallback = primary_progression_action(context)
-        if fallback:
-            return fallback
+    # 1. Deterministic profile-driven form actions (zero LLM token calls)
+    rule_actions = resolve_rule_based_actions(context, profile)
+    if rule_actions:
+        return rule_actions
 
-    prompt = f"""{SYSTEM_PROMPT}
-
-PROFILE:
-{json.dumps(profile, indent=2)}
-
-FORM_CONTEXT:
-{json.dumps(compact_context(context), indent=2)}
-"""
-    actions = await generate_action(prompt)
-    return actions if isinstance(actions, list) else []
+    # 2. Progression fallback
+    return primary_progression_action(context) or []
 
 
 def css_id_selector(element_id: str) -> str:
@@ -401,22 +516,53 @@ async def select_option(field: Locator, value: str) -> None:
         await field.scroll_into_view_if_needed(timeout=5000)
     except Exception:
         pass
+
+    clean_val = value.strip().replace("\u00a0", " ")
+
+    # 1. Direct label match
     try:
-        await field.select_option(label=value, timeout=5000)
-        return
-    except Exception:
-        pass
-    try:
-        await field.select_option(value=value, timeout=5000)
+        await field.select_option(label=value, timeout=2000)
         return
     except Exception:
         pass
 
-    await field.click(timeout=5000)
-    option = field.page.get_by_role("option", name=value, exact=True).first
-    if await option.count() == 0:
-        option = field.page.get_by_text(value, exact=True).first
-    await option.click(timeout=5000)
+    # 2. Cleaned label match
+    try:
+        await field.select_option(label=clean_val, timeout=2000)
+        return
+    except Exception:
+        pass
+
+    # 3. Direct value attribute match
+    try:
+        await field.select_option(value=value, timeout=2000)
+        return
+    except Exception:
+        pass
+
+    # 4. Search child <option> elements to find matching value attribute or text
+    try:
+        opt_loc = field.locator("option")
+        count = await opt_loc.count()
+        for i in range(count):
+            opt = opt_loc.nth(i)
+            t = (await opt.inner_text()).strip().replace("\u00a0", " ")
+            v = await opt.get_attribute("value")
+            if clean_val.lower() in t.lower() or t.lower() in clean_val.lower():
+                await field.select_option(value=v or t, timeout=3000)
+                return
+    except Exception:
+        pass
+
+    # 5. Non-native select (custom dropdown button/div)
+    try:
+        await field.click(timeout=3000)
+        opt_item = field.page.locator(f"[role='option']:has-text('{clean_val}'), li:has-text('{clean_val}')").first
+        if await opt_item.count() > 0:
+            await opt_item.click(timeout=3000)
+            return
+    except Exception:
+        pass
 
 
 async def execute_actions(page: Page, actions: list[dict[str, Any]], profile: dict[str, Any] = None) -> str:

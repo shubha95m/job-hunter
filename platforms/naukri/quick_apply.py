@@ -27,10 +27,20 @@ def load_applied_naukri_jobs(filepath: str = "applied_naukri_jobs.txt") -> Set[s
         return {line.strip() for line in f if line.strip()}
 
 
-def save_applied_naukri_job(job_id_or_url: str, filepath: str = "applied_naukri_jobs.txt"):
-    """Persist applied Naukri job identifier."""
+def save_applied_naukri_job(job_id_or_url: str, filepath: str = "applied_naukri_jobs.txt", company: Optional[str] = None, role_title: Optional[str] = None):
+    """Persist applied Naukri job identifier and sync with local CRM."""
     with open(filepath, "a", encoding="utf-8") as f:
         f.write(f"{job_id_or_url}\n")
+    try:
+        from runtime.crm import record_application
+        record_application(
+            job_url=job_id_or_url,
+            company=company or "Company via Naukri",
+            role_title=role_title or "Target Role",
+            platform="Naukri"
+        )
+    except Exception as e:
+        print(f"[CRM Warning] Failed to log Naukri application to CRM: {e}")
 
 
 def is_job_relevant(job_title: str, profile: dict) -> bool:
@@ -156,20 +166,20 @@ async def apply_to_single_naukri_job(
             page_content = (await target_page.content()).lower()
             if "applied" in page_content or "application sent" in page_content or "successfully applied" in page_content:
                 print(f"  ✅ [Naukri] Successfully applied to '{title}' at '{company}'!")
-                save_applied_naukri_job(clean_url)
+                save_applied_naukri_job(clean_url, company=company, role_title=title)
                 applied_jobs.add(clean_url)
                 await target_page.close()
                 return True
             else:
                 print(f"  [Naukri] Application state ambiguous, saved identifier.")
-                save_applied_naukri_job(clean_url)
+                save_applied_naukri_job(clean_url, company=company, role_title=title)
                 applied_jobs.add(clean_url)
                 await target_page.close()
                 return True
         else:
             # Applied directly in-page without opening new tab
             print(f"  ✅ [Naukri] Quick apply triggered directly on card for '{title}'!")
-            save_applied_naukri_job(clean_url)
+            save_applied_naukri_job(clean_url, company=company, role_title=title)
             applied_jobs.add(clean_url)
             return True
 

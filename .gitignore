@@ -21,10 +21,17 @@ env/
 # macOS
 .DS_Store
 
-# Logs
+# Logs & Trackers
 *.log
 applied_jobs.txt
 applied_naukri_jobs.txt
+
+# Local Application CRM (Personal Job History - Never commit!)
+applications.db
+applications.db-wal
+applications.db-shm
+applications_tracker.json
+*.tmp
 
 
 # Personal profiles (contain PII — never commit personal ones)
@@ -36,3 +43,6 @@ profile_template.yaml
 *.pdf
 *.doc
 *.docx
+Shubham_Sharma_Staff_SDET.pdf
+Shubham_Sharma_Staff_SDET_under1mb.pdf
+Shubham_Sharma_Single_Page_CV.pdf

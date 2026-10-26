@@ -267,6 +267,14 @@ async def connect_with_person(person_name_or_url: str, custom_note: Optional[str
         await page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
         await page.wait_for_timeout(3000)
 
+        # Check if already pending or connected
+        if await page.locator("button:has-text('Pending'), [role='button']:has-text('Pending')").count() > 0:
+            return {
+                "status": "ALREADY_PENDING",
+                "message": f"A connection request to '{person_name_or_url}' has already been sent and is currently pending.",
+                "profile_url": target_url
+            }
+
         connect_btn = page.locator("button:has-text('Connect'), a:has-text('Connect')").first
         if await connect_btn.count() == 0:
             more_btn = page.locator("button:has-text('More')").first
@@ -276,6 +284,13 @@ async def connect_with_person(person_name_or_url: str, custom_note: Optional[str
                 connect_btn = page.locator("div[role='button']:has-text('Connect'), span:has-text('Connect')").first
 
         if await connect_btn.count() == 0:
+            msg_btn = page.locator("button:has-text('Message')").first
+            if await msg_btn.count() > 0:
+                return {
+                    "status": "ALREADY_CONNECTED",
+                    "message": f"You appear to already be connected with '{person_name_or_url}' (direct Message button is available).",
+                    "profile_url": target_url
+                }
             raise RuntimeError(f"Connect button not available on profile '{target_url}'.")
 
         await connect_btn.click(force=True)
@@ -291,7 +306,7 @@ async def connect_with_person(person_name_or_url: str, custom_note: Optional[str
                     await note_box.fill(custom_note[:300])
                     await page.wait_for_timeout(1000)
 
-        send_invite_btn = page.locator("button:has-text('Send')").last
+        send_invite_btn = page.locator("button:has-text('Send without a note'), button:has-text('Send')").last
         if await send_invite_btn.count() > 0:
             await send_invite_btn.click(force=True)
             await page.wait_for_timeout(3000)
@@ -301,6 +316,236 @@ async def connect_with_person(person_name_or_url: str, custom_note: Optional[str
                 "note_included": bool(custom_note)
             }
         raise RuntimeError("Could not complete connection modal.")
+
+
+async def withdraw_sent_invitation(person_name_or_url: str) -> Dict[str, Any]:
+    """Withdraw/cancel a pending connection invitation sent to a person."""
+    query = person_name_or_url.strip()
+    vanity = query.split("/in/")[1].strip("/").split("?")[0] if "/in/" in query else ""
+
+    async with browser_pool.page(platform="linkedin", headless=True) as page:
+        await page.goto("https://www.linkedin.com/mynetwork/invitation-manager/sent/", wait_until="domcontentloaded", timeout=25000)
+        await page.wait_for_timeout(3500)
+
+        withdraw_link = None
+        links = await page.locator("a[aria-label*='Withdraw invitation sent to']").all()
+        for l in links:
+            aria = (await l.get_attribute("aria-label") or "").lower()
+            if query.lower() in aria or (vanity and vanity.lower() in aria):
+                withdraw_link = l
+                break
+
+        if not withdraw_link and vanity:
+            parent = page.locator(f"div[role='listitem']:has(a[href*='{vanity}']), li:has(a[href*='{vanity}'])").first
+            if await parent.count() > 0:
+                withdraw_link = parent.locator("a[aria-label*='Withdraw'], button:has-text('Withdraw')").first
+
+        if not withdraw_link:
+            raise RuntimeError(f"Could not find a pending sent connection request for '{person_name_or_url}'. Check get_sent_invitations to verify active pending requests.")
+
+        await withdraw_link.click(force=True)
+        await page.wait_for_timeout(2000)
+
+        confirm_btn = page.locator("button:has-text('Withdraw')").last
+        if await confirm_btn.count() == 0:
+            confirm_btn = page.locator("[role='dialog'] button:has-text('Withdraw'), .artdeco-modal button:has-text('Withdraw')").first
+
+        if await confirm_btn.count() == 0:
+            raise RuntimeError("Withdraw confirmation button did not appear in modal.")
+
+        await confirm_btn.click(force=True)
+        await page.wait_for_timeout(2500)
+
+        return {
+            "status": "SUCCESS",
+            "message": f"Successfully withdrew pending connection request sent to '{person_name_or_url}'."
+        }
+
+
+async def get_received_invitations(limit: int = 20) -> List[Dict[str, Any]]:
+    """Retrieve all pending incoming connection requests sent by others."""
+    async with browser_pool.page(platform="linkedin", headless=True) as page:
+        await page.goto("https://www.linkedin.com/mynetwork/invitation-manager/", wait_until="domcontentloaded", timeout=25000)
+        await page.wait_for_timeout(3500)
+
+        invitations = await page.evaluate(r"""() => {
+            const list = [];
+            const items = Array.from(document.querySelectorAll('div[role="listitem"], .invitation-card, .mn-invitation-list li'));
+            for (const item of items) {
+                const text = item.innerText || '';
+                if (!text.includes('Accept') && !text.includes('Ignore') && !text.includes('Dismiss')) continue;
+
+                const link = item.querySelector('a[href*="/in/"]');
+                const titleEl = item.querySelector('a[href*="/in/"] span, .invitation-card__title, h2, h3, strong');
+                const name = titleEl ? titleEl.innerText.trim() : (link ? link.innerText.trim() : 'Unknown Member');
+
+                const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+                let headline = '';
+                for (const l of lines) {
+                    if (l !== name && !l.includes('Accept') && !l.includes('Ignore') && !l.includes('Dismiss') && !l.includes('mutual') && l.length > 5) {
+                        headline = l;
+                        break;
+                    }
+                }
+
+                list.push({
+                    name: name.split('\n')[0].trim(),
+                    headline: headline,
+                    profile_url: link ? link.href.split('?')[0] : ''
+                });
+            }
+            return list;
+        }""")
+        return invitations[:limit]
+
+
+async def respond_to_invitation(person_name_or_url: str, action: str) -> Dict[str, Any]:
+    """Accept or decline an incoming connection invitation."""
+    action_norm = action.strip().lower()
+    if action_norm not in ("accept", "approve", "decline", "reject", "ignore", "dismiss"):
+        raise ValueError("action must be 'accept' or 'decline'/'ignore'.")
+
+    is_accept = action_norm in ("accept", "approve")
+
+    async with browser_pool.page(platform="linkedin", headless=True) as page:
+        await page.goto("https://www.linkedin.com/mynetwork/invitation-manager/", wait_until="domcontentloaded", timeout=25000)
+        await page.wait_for_timeout(3500)
+
+        query = person_name_or_url.strip()
+        vanity = query.split("/in/")[1].strip("/").split("?")[0] if "/in/" in query else ""
+
+        target_btn = None
+        cards = await page.locator("div[role='listitem'], .invitation-card, li").all()
+        for c in cards:
+            c_text = (await c.inner_text()).lower()
+            if query.lower() in c_text or (vanity and vanity.lower() in c_text):
+                btn = c.locator("button:has-text('Accept')" if is_accept else "button:has-text('Ignore'), button:has-text('Dismiss')").first
+                if await btn.count() > 0:
+                    target_btn = btn
+                    break
+
+        if not target_btn:
+            raise RuntimeError(f"Could not find an incoming connection invitation from '{person_name_or_url}'. Verify incoming invitations list.")
+
+        await target_btn.click(force=True)
+        await page.wait_for_timeout(3000)
+
+        action_verb = "accepted" if is_accept else "declined"
+        return {
+            "status": "SUCCESS",
+            "action": action_verb,
+            "person": person_name_or_url,
+            "message": f"Successfully {action_verb} connection invitation from '{person_name_or_url}'."
+        }
+
+
+async def check_connection_status(person_name_or_url: str) -> Dict[str, Any]:
+    """
+    Check relationship and connection status for a person on LinkedIn:
+    - CONNECTED (1st-degree connection)
+    - PENDING_SENT (Connection request sent by you, awaiting their acceptance)
+    - NOT_CONNECTED (2nd or 3rd degree, connect or follow available)
+    """
+    query = person_name_or_url.strip()
+    vanity = query.split("/in/")[1].strip("/").split("?")[0] if "/in/" in query else ""
+    q_lower = query.lower()
+    vanity_lower = vanity.lower()
+
+    # 1. Fast check: Pending sent invitations via Voyager API
+    try:
+        from platforms.linkedin.api import get_sent_invitations, get_connections
+        sent_list = get_sent_invitations(limit=100)
+        for s in sent_list:
+            s_name = s.get("name", "").lower()
+            s_pub = s.get("public_id", "").lower()
+            if (q_lower and q_lower in s_name) or (vanity_lower and vanity_lower == s_pub) or (s_pub and s_pub in q_lower):
+                return {
+                    "status": "PENDING_SENT",
+                    "relationship": "Invitation Sent (Pending Acceptance)",
+                    "person_name": s.get("name"),
+                    "headline": s.get("headline"),
+                    "profile_url": s.get("profile_url"),
+                    "sent_time": s.get("sent_time"),
+                    "message_sent": s.get("message"),
+                    "details": f"You sent a connection request to {s.get('name')} on {s.get('sent_time')}. It has not been accepted yet."
+                }
+    except Exception:
+        pass
+
+    # 2. Fast check: 1st-degree connections via Voyager API
+    try:
+        conns = get_connections(limit=200)
+        for c in conns:
+            c_name = c.get("name", "").lower()
+            c_pub = c.get("public_id", "").lower()
+            if (q_lower and q_lower in c_name) or (vanity_lower and vanity_lower == c_pub) or (c_pub and c_pub in q_lower):
+                return {
+                    "status": "CONNECTED",
+                    "connection_degree": "1st",
+                    "relationship": "1st-degree Connection",
+                    "person_name": c.get("name"),
+                    "headline": c.get("headline"),
+                    "profile_url": c.get("profile_url"),
+                    "can_direct_message": True,
+                    "details": f"You are 1st-degree connected with {c.get('name')}. Direct messaging is enabled."
+                }
+    except Exception:
+        pass
+
+    # 3. Fallback: inspect profile page via browser pool
+    async with browser_pool.page(platform="linkedin", headless=True) as page:
+        target_url = query
+        if "/in/" not in target_url:
+            encoded = urllib.parse.quote(query)
+            await page.goto(f"https://www.linkedin.com/search/results/people/?keywords={encoded}", wait_until="domcontentloaded", timeout=25000)
+            await page.wait_for_timeout(3000)
+            link = page.locator("a[href*='/in/']").first
+            if await link.count() > 0:
+                href = await link.get_attribute("href")
+                target_url = (href or "").split("?")[0]
+            else:
+                return {
+                    "status": "NOT_FOUND",
+                    "query": query,
+                    "details": f"Could not find any LinkedIn profile matching '{query}'."
+                }
+
+        await page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
+        await page.wait_for_timeout(3000)
+
+        main_text = await page.locator("main").inner_text()
+
+        has_pending = await page.locator("button:has-text('Pending'), div[role='button']:has-text('Pending')").count() > 0
+        has_connect = await page.locator("button:has-text('Connect'), a:has-text('Connect')").count() > 0
+        has_message = await page.locator("button:has-text('Message')").count() > 0
+        has_1st = "· 1st" in main_text or "1st degree connection" in main_text.lower()
+
+        if has_pending:
+            return {
+                "status": "PENDING_SENT",
+                "relationship": "Invitation Sent (Pending Acceptance)",
+                "profile_url": target_url,
+                "details": "Connection invitation is currently pending acceptance."
+            }
+        elif has_1st or (has_message and not has_connect):
+            return {
+                "status": "CONNECTED",
+                "connection_degree": "1st",
+                "relationship": "1st-degree Connection",
+                "profile_url": target_url,
+                "can_direct_message": True,
+                "details": "You are 1st-degree connected with this person."
+            }
+        else:
+            return {
+                "status": "NOT_CONNECTED",
+                "connection_degree": "2nd or 3rd+",
+                "relationship": "Not Connected",
+                "profile_url": target_url,
+                "can_connect": True,
+                "details": "You are not connected with this person. You can send a connection request."
+            }
+
 
 
 async def search_jobs(
