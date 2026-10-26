@@ -4,52 +4,58 @@ An intelligent, autonomous job application agent and enterprise LinkedIn MCP (Mo
 
 ---
 
-## ⚡ Core Architecture: Hybrid Execution Engine
+## ⚡ Core Architecture: Hybrid, Multi-Platform Engine
 
-Job Hunter uses a **hybrid automation architecture** designed for both ultra-fast read operations and robust browser-level interactions:
+Job Hunter uses a modular, multi-platform architecture designed for high-speed execution, self-recycling browser sessions, and cross-platform recruiter intelligence:
 
 ```text
-               AI Agent / MCP Client (Antigravity, Cursor, Claude)
+               AI Agent / MCP Client (Antigravity, Cursor, Claude, Codex)
                                       │
                                       ▼
-                               linkedin_mcp.py
+                           mcp_engine/server.py
+                       (linkedin_mcp.py facade)
                                       │
-         ┌────────────────────────────┴────────────────────────────┐
-         ▼                                                         ▼
- [Fast Backend API Engine]                              [Headless Browser Engine]
-  - Python httpx + Cookies                               - Playwright (Headless Chromium)
-  - Targets LinkedIn Voyager REST API                    - Uses saved session storage state
-  - No browser overhead (<300ms)                         - Handles complex DOM & UI events
-  - Read queries: Profile, Experience, Skills,           - Interactive actions: Recruiter Search,
-    Job Specs, Messages, CV Matching                       DMs, Connect Requests, Post Creation
+         ┌────────────────────────────┼────────────────────────────┐
+         ▼                            ▼                            ▼
+  platforms/linkedin/           platforms/naukri/               portals/
+   ├── api.py (Voyager REST)     ├── api.py (Naukri Gateway)    ├── agent.py (Phase 2 ATS)
+   ├── dom.py (Playwright UI)    └── dom.py (1-Click Apply)     ├── workday.py
+   └── easy_apply.py (Phase 1)                                  └── base.py
+         │                            │                            │
+         └────────────────────────────┼────────────────────────────┘
+                                      ▼
+                                   runtime/
+         ├── browser_pool.py (Self-recycling Playwright context pool)
+         ├── session_store.py (Isolated multi-account cookie manager)
+         ├── rate_limiter.py (Token-bucket rate limiter with jitter)
+         └── dom_utils.py (Resilient clicking & loader synchronization)
 ```
 
-### 1. Direct Voyager REST API (Backend Python + Session Cookies)
-- Reads authenticated session cookies (`JSESSIONID` and `li_at`) from `.auth/state.json`.
-- Makes direct HTTP requests via `httpx.Client` to LinkedIn's internal backend endpoints (`/voyager/api/...`).
-- **Speed:** Responses return in **100–300ms** without launching a browser or consuming GPU/CPU rendering resources.
+### 1. Direct Platform REST APIs (`platforms/<platform>/api.py`)
+- Reads authenticated session cookies (`JSESSIONID`, `li_at`, etc.) from `.auth/`.
+- Makes direct HTTP requests via `httpx.Client` to platform backend endpoints.
+- **Speed:** Responses return in **100–300ms** without launching a browser.
 - **Used for:** Profile inspection, work experience, skill extraction, unread message checks, job details, and CV-to-job matching.
 
-### 2. Headless Browser Automation (Playwright Chromium)
-- Reuses the saved browser storage state (`.auth/state.json`) with pre-authenticated session state.
-- Bypasses login prompts and CAPTCHAs silently in the background.
+### 2. High-Performance Browser Context Pool (`runtime/browser_pool.py`)
+- Maintains a lazy-initialized Chromium process and leases isolated browser contexts.
+- Auto-recycles contexts every 20 operations to eliminate memory leaks.
+- Avoids cold-start browser boot latency across sequential MCP calls.
 - **Used for:** Recruiter discovery, public people searches, connection requests, and message dispatch.
 
 ---
 
-## 🚀 Job Application Pipeline
+## 🚀 Autonomous Job Application Pipeline
 
-The automation workflow is split into two specialized phases:
+The automation workflow is cleanly separated into specialized modules:
 
-### Phase 1: LinkedIn Easy Apply Agent (`agent.py`)
-- Navigates through LinkedIn search results and identifies jobs matching profile keywords.
-- Detects the **Easy Apply** modal.
-- Autonomously fills standard multi-step forms (experience years, radio buttons, dropdowns, resume attachment, disclosures).
-- Uses token-tracked LLM assistance for custom/unfamiliar screening questions.
+### Phase 1: In-Platform Quick Apply (`platforms/linkedin/easy_apply.py`, `platforms/naukri/quick_apply.py`, `agent.py`)
+- **LinkedIn Easy Apply:** Autonomously detects Easy Apply modals, fills multi-step forms (experience years, radio buttons, dropdowns, resume attachment, disclosures), and uses token-tracked LLM assistance for custom screening questions.
+- **Naukri Quick Apply:** Seamlessly identifies modern Naukri `Quick apply` cards, matches role criteria, executes 1-click in-platform submission, handles screening questionnaires, and logs applied jobs.
 
-### Phase 2: External Company Portal Agent (`external_portal_agent.py`)
-- Detects jobs requiring direct application on external company ATS portals (e.g., **Workday**, **Greenhouse**, **Lever**, **Taleo**, **iCIMS**, **Ashby**).
-- Captures new browser tabs when clicking external apply links.
+
+### Phase 2: External Enterprise ATS Portals (`portals/agent.py`, `external_portal_agent.py`)
+- Platform-agnostic engine that takes over when a job redirects to external company career portals (e.g., **Workday**, **Greenhouse**, **Lever**, **Taleo**, **iCIMS**, **Ashby**).
 - **Automated Portal Features:**
   - **Account Creation / Login:** Detects authentication requirements and creates candidate portal accounts using configured credentials.
   - **Resume Upload & Constraints:** Handles file upload triggers and automatically switches to optimized files if size limits (e.g., Workday 1MB) are detected.
@@ -58,12 +64,23 @@ The automation workflow is split into two specialized phases:
 
 ---
 
+
 ## 🛠️ LinkedIn MCP Server Tools Overview
 
-The included Model Context Protocol server (`linkedin_mcp.py`) exposes 25+ tools to AI coding environments (e.g., Antigravity, Cursor, Claude Code):
+The included universal Model Context Protocol server (`mcp.py`) exposes 30+ tools and operating guideline resources to AI coding environments (e.g., Antigravity, Cursor, Claude Code):
+
+### MCP Operating Guidelines Resources
+AI agents connected to this MCP server can read standard resources for cross-platform workflows:
+- `guidelines://cross-platform-workflow` — Complete guide on combining Naukri job discovery with LinkedIn recruiter mapping and DMs.
+- `guidelines://outbound-dm-templates` — Proven cold outreach templates referencing job URLs from Naukri or LinkedIn.
+- `guidelines://platform-capabilities` — Capabilities matrix comparing Naukri Quick Apply vs LinkedIn member graph.
+
+### Tools Overview
 
 | Tool Name | Engine | Description |
 |---|---|---|
+| `search_cross_platform_jobs` | Naukri + LinkedIn | Aggregates jobs from both platforms, tags origin (`[Platform: Naukri]` / `[Platform: LinkedIn]`), maps LinkedIn recruiters for each company, and provides pre-drafted DMs. |
+| `draft_recruiter_pitch` | Local Engine | Generates tailored outreach pitches for recruiters citing specific job URLs and platform origins. |
 | `get_intro` | Voyager API | Returns full name, headline, vanity URL, and occupation. |
 | `get_about` | Voyager API | Fetches profile about/summary section. |
 | `get_experience` | Voyager API | Lists all work experiences, company names, titles, and dates. |
@@ -82,8 +99,15 @@ The included Model Context Protocol server (`linkedin_mcp.py`) exposes 25+ tools
 | `send_dm` | Playwright | Sends direct messages *(requires user confirmation)*. |
 | `connect_with_person` | Playwright | Dispatches connection requests with custom notes *(requires confirmation)*. |
 | `create_post` | Playwright | Publishes a LinkedIn feed post *(requires confirmation)*. |
+| `naukri_get_profile` | Playwright | Diagnostic check of Naukri session state and live candidate profile details. |
+| `naukri_search_jobs` | Playwright | Searches jobs on Naukri and returns structured cards with Quick Apply status. |
+| `naukri_search_recruiters` | Playwright | Discovers recruiters hiring on Naukri for target companies. |
+| `naukri_update_headline` | Playwright | Updates candidate resume headline on Naukri *(requires confirmation)*. |
+| `naukri_quick_apply` | Playwright | Submits Phase 1 Quick Apply applications on Naukri *(requires confirmation)*. |
 
-> **Safety Guard:** Any mutating or communication action (`send_dm`, `connect_with_person`, `create_post`, `update_*`) strictly requires `confirmed=True` to prevent accidental actions.
+> **Safety Guard:** Any mutating or communication action (`send_dm`, `connect_with_person`, `create_post`, `update_*`, `naukri_update_headline`, `naukri_quick_apply`) strictly requires `confirmed=True` to prevent accidental actions.
+
+
 
 ---
 
@@ -102,11 +126,16 @@ playwright install chromium
 ```
 
 ### 3. One-Time Authentication
-Run the interactive login script:
+Run the interactive login script for your platform of choice:
+
 ```bash
-python auth.py
+# Authenticate with LinkedIn (default)
+python auth.py --linkedin
+
+# Authenticate with Naukri
+python auth.py --naukri
 ```
-A visual browser window will open. Log into your LinkedIn account. Once logged in, close the browser window. Your authenticated session state and cookies will be stored locally in `.auth/state.json`.
+A visual browser window will open. Log into your account. Once logged in, close the browser window. Your authenticated session cookies will be stored locally in `.auth/` (`.auth/state.json` for LinkedIn, `.auth/naukri_state.json` for Naukri).
 
 > **Security Note:** `.auth/` and `.env` are strictly excluded in `.gitignore`. Never commit or publish session storage files.
 
@@ -128,15 +157,23 @@ JOB_TIMEOUT_SECONDS=240
 
 ## 🖥️ Usage
 
-### Running the Job Application Agent
-Run the main runner to automatically search and apply for jobs:
+### Running the Multi-Platform Job Application Agent
+Run the main runner to automatically search and apply for jobs on your desired platform:
+
 ```bash
-python main.py
+# Run on LinkedIn (Phase 1 Easy Apply & Phase 2 ATS Portals)
+python main.py --linkedin
+
+# Run on Naukri
+python main.py --naukri
+
+# Additional options
+python main.py --linkedin --profile my_profile --max-apps 20 --headless
 ```
 
-### Connecting the LinkedIn MCP Server to Your AI IDE
+### Connecting the Universal Recruiter MCP Server to Your AI IDE
 
-Once you have completed the one-time authentication (`python auth.py`), you can connect `linkedin_mcp.py` to any AI coding assistant or IDE supporting the Model Context Protocol (**Cursor**, **Claude Desktop**, **Antigravity**, **Codex**, or **Windsurf**).
+Once you have completed the one-time authentication (`python auth.py`), you can connect `mcp.py` to any AI coding assistant or IDE supporting the Model Context Protocol (**Cursor**, **Claude Desktop**, **Antigravity**, **Codex**, or **Windsurf**). The single `mcp.py` server manages recruiter discovery, candidate messaging, and job intelligence across all supported platforms (LinkedIn, Naukri, and external portals).
 
 #### Step 1: Note your repository path
 In your terminal, navigate to the cloned `job-hunter` directory and run:
@@ -158,10 +195,10 @@ Note the path to your repository and virtual environment Python interpreter:
 ```json
 {
   "mcpServers": {
-    "linkedin": {
+    "recruiter-hunter": {
       "command": "<path-to-job-hunter>/venv/bin/python",
       "args": [
-        "<path-to-job-hunter>/linkedin_mcp.py"
+        "<path-to-job-hunter>/mcp.py"
       ],
       "env": {
         "PYTHONPATH": "<path-to-job-hunter>"
@@ -176,10 +213,10 @@ Add the server configuration to your global config (`~/.gemini/config/mcp_config
 ```json
 {
   "mcpServers": {
-    "linkedin": {
+    "recruiter-hunter": {
       "command": "<path-to-job-hunter>/venv/bin/python",
       "args": [
-        "<path-to-job-hunter>/linkedin_mcp.py"
+        "<path-to-job-hunter>/mcp.py"
       ],
       "env": {
         "PYTHONPATH": "<path-to-job-hunter>"
@@ -194,14 +231,14 @@ Open your Claude Desktop configuration file:
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
-Add the `linkedin` server under `mcpServers`:
+Add the server under `mcpServers`:
 ```json
 {
   "mcpServers": {
-    "linkedin": {
+    "recruiter-hunter": {
       "command": "<path-to-job-hunter>/venv/bin/python",
       "args": [
-        "<path-to-job-hunter>/linkedin_mcp.py"
+        "<path-to-job-hunter>/mcp.py"
       ],
       "env": {
         "PYTHONPATH": "<path-to-job-hunter>"
@@ -216,10 +253,10 @@ In your MCP settings or plugin JSON configuration:
 ```json
 {
   "mcpServers": {
-    "linkedin": {
+    "recruiter-hunter": {
       "command": "<path-to-job-hunter>/venv/bin/python",
       "args": [
-        "<path-to-job-hunter>/linkedin_mcp.py"
+        "<path-to-job-hunter>/mcp.py"
       ],
       "env": {
         "PYTHONPATH": "<path-to-job-hunter>"
@@ -227,6 +264,10 @@ In your MCP settings or plugin JSON configuration:
     }
   }
 }
+```
+
+*(Note: `linkedin_mcp.py` is also retained as a direct backward-compatible runner for existing setups).*
+
 ```
 
 > **Tip:** Replace `<path-to-job-hunter>` with the absolute path returned by `pwd` on your machine.

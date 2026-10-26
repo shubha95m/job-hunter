@@ -1,4 +1,6 @@
 import os
+import sys
+import argparse
 import asyncio
 import yaml
 import urllib.parse
@@ -9,13 +11,14 @@ from browser import get_browser, get_context, save_state
 from agent import execute_smart_form_fill, get_easy_apply_modal
 from external_portal_agent import execute_external_portal_apply
 from llm_wrapper import token_tracker
+from runtime.session_store import get_state_file
 
 load_dotenv()
 
 JOB_TIMEOUT_SECONDS = int(os.getenv("JOB_TIMEOUT_SECONDS", "240"))
 
-def load_profile():
-    profile_name = os.getenv("PROFILE", "dummy_profile")
+def load_profile(profile_override: str = None):
+    profile_name = profile_override or os.getenv("PROFILE", "dummy_profile")
     profile_path = os.path.join("profiles", f"{profile_name}.yaml")
     if not os.path.exists(profile_path):
         print(f"ERROR: Profile not found at '{profile_path}'. Check your PROFILE setting in .env.")
@@ -265,9 +268,10 @@ async def dismiss_easy_apply_modal(page: Page):
     except Exception:
         pass
 
-async def main():
-    print("Starting Job Hunter...")
-    profile = load_profile()
+
+async def run_linkedin_workflow(profile: dict, max_apps: int = 15, headless: bool = False):
+    """Executes the LinkedIn Job Hunter application workflow (Phase 1 Easy Apply & Phase 2 ATS Portals)."""
+    print("\n--- [LinkedIn Engine] Starting Application Run ---")
     keywords = profile.get("job_preferences", {}).get("keywords", [])
     locations = profile.get("job_preferences", {}).get("locations", [])
     
@@ -280,32 +284,26 @@ async def main():
     print(f"Search URL: {search_url} (Easy Apply Only: {easy_apply_only})")
     
     async with async_playwright() as p:
-        browser = await get_browser(p, headless=False)
-        # Attempt to load persistent context. Ensure user has run auth.py first!
+        browser = await get_browser(p, headless=headless)
         context = await get_context(browser, persist=True)
         page = await context.new_page()
         
-        print("Navigating to search results...")
+        print("Navigating to LinkedIn search results...")
         await page.goto(search_url, wait_until="domcontentloaded")
         await page.wait_for_load_state("domcontentloaded")
 
         if not await has_valid_linkedin_session(page):
-            print("ERROR: LinkedIn session is not valid. Run `python auth.py` and log in again.")
+            print("ERROR: LinkedIn session is not valid. Run `python auth.py --linkedin` and log in again.")
             await browser.close()
             return
         
         # Scrape job cards (robust method)
         job_links = []
-        max_apps = int(os.getenv("MAX_APPLICATIONS", "15"))
         try:
-            # Wait for the job list to appear
             await page.wait_for_selector(".jobs-search-results__list, .scaffold-layout__list", timeout=15000)
-            
-            # Scroll the job list panel to lazy-load more cards
             target_links = max(max_apps * 5, max_apps)
             print(f"Scrolling job list to collect up to {target_links} candidate job links...")
-            for scroll_pass in range(10): # scroll up to 10 times
-                # Collect current links
+            for scroll_pass in range(10):
                 links = await page.locator("a[href*='/jobs/view/']").all()
                 for link in links:
                     href = await link.get_attribute("href")
@@ -315,36 +313,32 @@ async def main():
                             job_links.append(clean_url)
                 
                 if len(job_links) >= target_links:
-                    break # We have enough, stop scrolling
+                    break
                 
-                # Scroll the job list panel down to load more cards
                 await page.evaluate("""
                     const list = document.querySelector('.jobs-search-results__list, .scaffold-layout__list');
                     if (list) list.scrollBy(0, 600);
                 """)
-                await asyncio.sleep(1.5) # wait for new cards to load
+                await asyncio.sleep(1.5)
             
             print(f"Found {len(job_links)} unique job links after scrolling.")
-            # We no longer hardcode a limit here, we check max_applications below
         except Exception as e:
             print(f"Error scraping job list: {e}")
             
         print(f"Found {len(job_links)} jobs to process.")
         
-        applied_jobs_set = load_applied_jobs()
+        applied_jobs_set = load_applied_jobs(filepath="applied_jobs.txt")
         success_count = 0
         successful_jobs = []
-        
 
         for link in job_links:
             if success_count >= max_apps:
-                print(f"\\n[INFO] Reached maximum requested applications ({max_apps}). Stopping.")
+                print(f"\n[INFO] Reached maximum requested applications ({max_apps}). Stopping.")
                 break
                 
             if not link.startswith("http"):
                 continue
                 
-            # Normalize the link to avoid query param mismatches
             clean_link = link.split('?')[0]
             if clean_link in applied_jobs_set:
                 print(f"Skipping already applied job: {clean_link}")
@@ -368,23 +362,71 @@ async def main():
             if success:
                 success_count += 1
                 successful_jobs.append(link)
-                save_applied_job(clean_link)
+                save_applied_job(clean_link, filepath="applied_jobs.txt")
                 applied_jobs_set.add(clean_link)
                 
-            # Add human-like delay
             await asyncio.sleep(2)
             
         print("\n=================================")
-        print(f"Job Hunter Run Complete!")
+        print(f"LinkedIn Job Hunter Run Complete!")
         print(f"Total Successfully Applied: {success_count}")
         for job in successful_jobs:
             print(f" - {job}")
         print("=================================\n")
 
         token_tracker.print_summary()
-
         await save_state(context)
         await browser.close()
+
+
+async def run_naukri_workflow(profile: dict, max_apps: int = 15, headless: bool = True):
+    """Executes the Naukri Job Hunter Phase 1 application workflow headlessly in the background."""
+    from platforms.naukri.quick_apply import search_and_apply_naukri
+    await search_and_apply_naukri(profile=profile, max_apps=max_apps, headless=headless)
+
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Autonomous Multi-Platform Job Hunter & Application Agent")
+    parser.add_argument("--platform", choices=["linkedin", "naukri"], default=None, help="Target platform to run")
+    parser.add_argument("--linkedin", action="store_true", help="Run LinkedIn job applications")
+    parser.add_argument("--naukri", action="store_true", help="Run Naukri job applications")
+    parser.add_argument("--profile", type=str, default=None, help="Candidate profile name in profiles/")
+    parser.add_argument("--max-apps", type=int, default=None, help="Maximum number of applications to submit")
+    parser.add_argument("--headed", action="store_true", help="Run browser in visible headed mode (default: False, runs headless)")
+    parser.add_argument("--headless", action="store_true", default=True, help="Run browser in headless mode (default: True)")
+    return parser.parse_args()
+
+
+async def main():
+    args = parse_args()
+    
+    # Resolve platform
+    target_platform = "linkedin"
+    if args.naukri:
+        target_platform = "naukri"
+    elif args.linkedin:
+        target_platform = "linkedin"
+    elif args.platform:
+        target_platform = args.platform
+
+    profile = load_profile(profile_override=args.profile)
+    max_apps = args.max_apps or int(os.getenv("MAX_APPLICATIONS", "15"))
+    headless = not args.headed if args.headed else (os.getenv("HEADLESS", "true").lower() == "true")
+
+
+    print(f"\n========================================================")
+    print(f"  🤖 Autonomous Job Hunter Engine")
+    print(f"  Target Platform : {target_platform.upper()}")
+    print(f"  Max Applications: {max_apps}")
+    print(f"  Headless Mode   : {headless}")
+    print(f"========================================================\n")
+
+    if target_platform == "naukri":
+        await run_naukri_workflow(profile=profile, max_apps=max_apps, headless=headless)
+    else:
+        await run_linkedin_workflow(profile=profile, max_apps=max_apps, headless=headless)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
