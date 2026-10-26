@@ -7,6 +7,7 @@ Bypasses browser rendering for reads, summaries, skills, jobs, and candidate met
 import os
 import json
 import urllib.parse
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import httpx
@@ -277,3 +278,100 @@ def get_job_details(job_id_or_url: str) -> Dict[str, Any]:
             "description": desc,
             "job_url": f"https://www.linkedin.com/jobs/view/{job_id}/"
         }
+
+
+def get_connections(limit: int = 50, start: int = 0, sort_by: str = "RECENTLY_ADDED") -> List[Dict[str, Any]]:
+    """
+    Retrieve candidate's 1st-degree connections with details (name, headline, public identifier, profile URL).
+    Ultra-fast query using internal Voyager relationships API.
+    """
+    with get_voyager_client() as client:
+        url = f"https://www.linkedin.com/voyager/api/relationships/connections?count={limit}&sortType={sort_by}&start={start}"
+        resp = client.get(url)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Failed to fetch LinkedIn connections: HTTP {resp.status_code}")
+            
+        data = resp.json()
+        connections = []
+        for inc in data.get("included", []):
+            if "MiniProfile" in inc.get("$type", ""):
+                first_name = inc.get("firstName", "")
+                last_name = inc.get("lastName", "")
+                public_id = inc.get("publicIdentifier", "")
+                headline = inc.get("occupation", "")
+                entity_urn = inc.get("entityUrn", "")
+                dash_urn = inc.get("dashEntityUrn", "")
+                
+                connections.append({
+                    "name": f"{first_name} {last_name}".strip(),
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "headline": headline,
+                    "public_id": public_id,
+                    "profile_url": f"https://www.linkedin.com/in/{public_id}/" if public_id else "",
+                    "entity_urn": entity_urn,
+                    "dash_urn": dash_urn
+                })
+        return connections
+
+
+def get_sent_invitations(limit: int = 50, start: int = 0) -> List[Dict[str, Any]]:
+    """
+    Retrieve all pending connection requests sent to others that have not yet been accepted.
+    Extracts recipient profile details, timestamp, and optional custom invitation note.
+    """
+    with get_voyager_client() as client:
+        url = f"https://www.linkedin.com/voyager/api/relationships/sentInvitationViewsV2?invitationType=CONNECTION&q=invitationType&count={limit}&start={start}"
+        resp = client.get(url)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Failed to fetch sent invitations: HTTP {resp.status_code}")
+            
+        data = resp.json()
+        
+        # Build mini-profile lookup map
+        profiles = {}
+        for inc in data.get("included", []):
+            if "MiniProfile" in inc.get("$type", ""):
+                urn = inc.get("entityUrn")
+                first = inc.get("firstName", "")
+                last = inc.get("lastName", "")
+                pub_id = inc.get("publicIdentifier", "")
+                profiles[urn] = {
+                    "name": f"{first} {last}".strip(),
+                    "first_name": first,
+                    "last_name": last,
+                    "headline": inc.get("occupation", ""),
+                    "public_id": pub_id,
+                    "profile_url": f"https://www.linkedin.com/in/{pub_id}/" if pub_id else "",
+                    "entity_urn": urn,
+                    "dash_urn": inc.get("dashEntityUrn", "")
+                }
+                
+        invitations = []
+        for inc in data.get("included", []):
+            if inc.get("$type") == "com.linkedin.voyager.relationships.invitation.Invitation":
+                to_urn = inc.get("*toMember") or inc.get("toMemberId")
+                if not to_urn and isinstance(inc.get("invitee"), dict):
+                    to_urn = inc.get("invitee", {}).get("*miniProfile")
+                prof = profiles.get(to_urn, {})
+                sent_ms = inc.get("sentTime")
+                sent_formatted = ""
+                if sent_ms:
+                    try:
+                        sent_formatted = datetime.fromtimestamp(sent_ms / 1000.0).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        sent_formatted = str(sent_ms)
+                        
+                invitations.append({
+                    "name": prof.get("name", "Unknown Member"),
+                    "headline": prof.get("headline", ""),
+                    "public_id": prof.get("public_id", ""),
+                    "profile_url": prof.get("profile_url", ""),
+                    "sent_time": sent_formatted,
+                    "sent_time_ms": sent_ms,
+                    "invitation_urn": inc.get("entityUrn", ""),
+                    "mailbox_item_id": inc.get("mailboxItemId", ""),
+                    "message": inc.get("message")
+                })
+        return invitations
+

@@ -25,7 +25,17 @@ def load_profile(profile_override: str = None):
         raise FileNotFoundError(profile_path)
     print(f"Loading profile: {profile_path}")
     with open(profile_path, "r") as f:
-        return yaml.safe_load(f)
+        data = yaml.safe_load(f) or {}
+
+    # Allow overriding resume paths directly from .env if set
+    env_resume = os.getenv("RESUME_PATH")
+    if env_resume:
+        data["resume_path"] = env_resume
+    env_resume_1mb = os.getenv("RESUME_UNDER1MB_PATH")
+    if env_resume_1mb:
+        data["resume_under1mb_path"] = env_resume_1mb
+
+    return data
 
 def load_applied_jobs(filepath="applied_jobs.txt"):
     """Load previously applied jobs into a set."""
@@ -35,11 +45,22 @@ def load_applied_jobs(filepath="applied_jobs.txt"):
         # Extract just the URL portion before the ' | ' if a timestamp exists
         return set(line.split(" | ")[0].strip() for line in f if line.strip())
 
-def save_applied_job(job_url, filepath="applied_jobs.txt"):
-    """Append a successfully applied job to the tracking file."""
+def save_applied_job(job_url, filepath="applied_jobs.txt", company=None, role_title=None):
+    """Append a successfully applied job to the tracking file and CRM database."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(filepath, "a") as f:
         f.write(f"{job_url} | {timestamp}\n")
+    try:
+        from runtime.crm import record_application
+        record_application(
+            job_url=job_url,
+            company=company or "Company via LinkedIn",
+            role_title=role_title or "Target Role",
+            platform="LinkedIn",
+            applied_at=timestamp
+        )
+    except Exception as e:
+        print(f"[CRM Warning] Failed to log application to CRM: {e}")
 
 def build_search_url(keywords, locations, easy_apply_only=False):
     base_url = "https://www.linkedin.com/jobs/search/?"
@@ -73,7 +94,7 @@ def is_job_relevant(job_title: str, profile: dict) -> bool:
     
     return any(kw.lower() in title_lower for kw in keywords)
 
-async def process_job(page: Page, job_url: str, profile: dict, context: BrowserContext = None):
+async def process_job(page: Page, job_url: str, profile: dict, context: BrowserContext = None, force: bool = False):
     print(f"\nProcessing job: {job_url}")
     await page.goto(job_url, wait_until="domcontentloaded")
     await asyncio.sleep(2)  # Give dynamic scripts / hydration a moment to attach
@@ -85,7 +106,7 @@ async def process_job(page: Page, job_url: str, profile: dict, context: BrowserC
     except Exception:
         job_title = ""
     
-    if job_title and not is_job_relevant(job_title, profile):
+    if not force and job_title and not is_job_relevant(job_title, profile):
         print(f"  Skipping irrelevant job: '{job_title}'")
         return False
     
@@ -386,11 +407,49 @@ async def run_naukri_workflow(profile: dict, max_apps: int = 15, headless: bool 
 
 
 
+async def run_wishlist_workflow(profile: dict, headless: bool = True):
+    """Executes applications for all saved jobs in your local Wishlist queue."""
+    from runtime.crm import get_wishlist
+    wishlist = get_wishlist()
+    if not wishlist:
+        print("Your Wishlist is currently empty.")
+        return
+
+    print(f"\n--- [Wishlist Runner] Processing {len(wishlist)} Saved Opportunity(ies) ---")
+    async with async_playwright() as p:
+        browser = await get_browser(p, headless=headless)
+        context = await get_context(browser, persist=True)
+        page = await context.new_page()
+
+        for item in wishlist:
+            url = item["job_url"]
+            comp = item["company"]
+            role = item["role_title"]
+            platform = item.get("platform", "LinkedIn").lower()
+
+            print(f"\nProcessing Wishlist Job: {role} at {comp} [{item.get('platform')}]")
+            if "linkedin" in platform:
+                try:
+                    success = await process_job(page, url, profile, context=context, force=True)
+                    if success:
+                        save_applied_job(url, company=comp, role_title=role)
+                        print(f"  ✅ Successfully applied to {role} at {comp}!")
+                    else:
+                        print(f"  Could not complete application for {role} at {comp}.")
+                except Exception as e:
+                    print(f"  Error applying to {url}: {e}")
+            else:
+                print(f"  Skipping non-LinkedIn platform '{item.get('platform')}' in this automated batch.")
+
+        await browser.close()
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Autonomous Multi-Platform Job Hunter & Application Agent")
     parser.add_argument("--platform", choices=["linkedin", "naukri"], default=None, help="Target platform to run")
     parser.add_argument("--linkedin", action="store_true", help="Run LinkedIn job applications")
     parser.add_argument("--naukri", action="store_true", help="Run Naukri job applications")
+    parser.add_argument("--wishlist", action="store_true", help="Apply to all saved jobs in your Wishlist queue")
     parser.add_argument("--profile", type=str, default=None, help="Candidate profile name in profiles/")
     parser.add_argument("--max-apps", type=int, default=None, help="Maximum number of applications to submit")
     parser.add_argument("--headed", action="store_true", help="Run browser in visible headed mode (default: False, runs headless)")
@@ -414,15 +473,19 @@ async def main():
     max_apps = args.max_apps or int(os.getenv("MAX_APPLICATIONS", "15"))
     headless = not args.headed if args.headed else (os.getenv("HEADLESS", "true").lower() == "true")
 
-
     print(f"\n========================================================")
     print(f"  🤖 Autonomous Job Hunter Engine")
-    print(f"  Target Platform : {target_platform.upper()}")
-    print(f"  Max Applications: {max_apps}")
+    if args.wishlist:
+        print(f"  Mode            : WISHLIST QUEUE RUNNER")
+    else:
+        print(f"  Target Platform : {target_platform.upper()}")
+        print(f"  Max Applications: {max_apps}")
     print(f"  Headless Mode   : {headless}")
     print(f"========================================================\n")
 
-    if target_platform == "naukri":
+    if args.wishlist:
+        await run_wishlist_workflow(profile=profile, headless=headless)
+    elif target_platform == "naukri":
         await run_naukri_workflow(profile=profile, max_apps=max_apps, headless=headless)
     else:
         await run_linkedin_workflow(profile=profile, max_apps=max_apps, headless=headless)

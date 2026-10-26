@@ -1,288 +1,263 @@
-# Job Hunter & LinkedIn MCP Agent
+# 🚀 Job Hunter & Recruiter Intelligence Agent
 
-An intelligent, autonomous job application agent and enterprise LinkedIn MCP (Model Context Protocol) server powered by Playwright, Python, and LLM integrations.
+An autonomous, multi-platform job application engine, personal CRM, and Model Context Protocol (MCP) server. Built for **LinkedIn**, **Naukri**, and **Company ATS Portals** (Workday, Greenhouse, Lever, etc.), designed to run seamlessly with AI IDEs like **Antigravity IDE**, **Cursor**, **Windsurf**, and **Claude Code**.
 
 ---
 
-## ⚡ Core Architecture: Hybrid, Multi-Platform Engine
+## 🌟 Key Highlights & Why It's Built Differently
 
-Job Hunter uses a modular, multi-platform architecture designed for high-speed execution, self-recycling browser sessions, and cross-platform recruiter intelligence:
+- 🤖 **Native AI IDE Intelligence (Zero External LLM Cost):** You don't need expensive third-party LLM API keys. When running inside an AI IDE, the IDE itself provides the reasoning, while the local deterministic engine drives Playwright headlessly in the background.
+- 🗄️ **Unified Local CRM & Real-Time Sync:** Fully local SQLite database (`applications.db` with WAL mode) with real-time atomic JSON mirroring (`applications_tracker.json`). Zero data loss, zero remote tracking.
+- ⭐ **Opportunity Wishlist & Package Tracking:** Search high-paying roles (e.g., > ₹1 Crore / $120k+ USD), bookmark them in a Wishlist with salary notes, and apply when ready.
+- 🔄 **Auto-Purge on Apply:** When you apply to a wishlisted job, it is automatically removed from the Wishlist, moved to active Applications, and inherits its package/notes.
+- 🤝 **Recruiter Touchpoint Cadence Engine:** Day 0 (Applied) ➔ Day 2 (Warm Recruiter Connection) ➔ Day 7 (Follow-up DM) with a 24-hour company deduplication guard.
+- 📄 **Single-Page Dynamic CV Rendering:** Automatically fetches and compiles your web resume/portfolio into an ATS-compliant, single-page PDF (< 200 KB) and attaches it on the fly.
+- 🔒 **100% Private & Git-Safe:** All sessions (`.auth/`), databases (`applications.db`), trackers, and personal resumes (`*.pdf`) are strictly excluded in `.gitignore`.
+
+---
+
+## ⚡ Core Architecture
 
 ```text
-               AI Agent / MCP Client (Antigravity, Cursor, Claude, Codex)
-                                      │
-                                      ▼
-                           mcp_engine/server.py
-                       (linkedin_mcp.py facade)
-                                      │
-         ┌────────────────────────────┼────────────────────────────┐
-         ▼                            ▼                            ▼
-  platforms/linkedin/           platforms/naukri/               portals/
-   ├── api.py (Voyager REST)     ├── api.py (Naukri Gateway)    ├── agent.py (Phase 2 ATS)
-   ├── dom.py (Playwright UI)    └── dom.py (1-Click Apply)     ├── workday.py
-   └── easy_apply.py (Phase 1)                                  └── base.py
-         │                            │                            │
-         └────────────────────────────┼────────────────────────────┘
-                                      ▼
-                                   runtime/
-         ├── browser_pool.py (Self-recycling Playwright context pool)
-         ├── session_store.py (Isolated multi-account cookie manager)
-         ├── rate_limiter.py (Token-bucket rate limiter with jitter)
-         └── dom_utils.py (Resilient clicking & loader synchronization)
+               AI Agent / MCP Client (Antigravity IDE, Cursor, Claude, Windsurf)
+                                       │
+                                       ▼
+                              mcp_engine/server.py
+                            (Universal MCP Protocol)
+                                       │
+         ┌─────────────────────────────┼─────────────────────────────┐
+         ▼                             ▼                             ▼
+  platforms/linkedin/           platforms/naukri/                 portals/
+   ├── api.py (Voyager REST)     ├── api.py (Naukri Gateway)     ├── agent.py (Phase 2 ATS)
+   ├── dom.py (Playwright UI)    └── quick_apply.py              ├── workday.py
+   └── easy_apply.py (Phase 1)                                   └── base.py
+         │                             │                             │
+         └─────────────────────────────┼─────────────────────────────┘
+                                       ▼
+                               runtime/crm.py
+                        (SQLite WAL + applications_tracker.json)
 ```
 
-### 1. Direct Platform REST APIs (`platforms/<platform>/api.py`)
-- Reads authenticated session cookies (`JSESSIONID`, `li_at`, etc.) from `.auth/`.
-- Makes direct HTTP requests via `httpx.Client` to platform backend endpoints.
-- **Speed:** Responses return in **100–300ms** without launching a browser.
-- **Used for:** Profile inspection, work experience, skill extraction, unread message checks, job details, and CV-to-job matching.
-
-### 2. High-Performance Browser Context Pool (`runtime/browser_pool.py`)
-- Maintains a lazy-initialized Chromium process and leases isolated browser contexts.
-- Auto-recycles contexts every 20 operations to eliminate memory leaks.
-- Avoids cold-start browser boot latency across sequential MCP calls.
-- **Used for:** Recruiter discovery, public people searches, connection requests, and message dispatch.
-
 ---
 
-## 🚀 Autonomous Job Application Pipeline
+## 📦 Step-by-Step Installation & Setup
 
-The automation workflow is cleanly separated into specialized modules:
+### Step 1: Clone the Repository & Set Up Virtual Environment
 
-### Phase 1: In-Platform Quick Apply (`platforms/linkedin/easy_apply.py`, `platforms/naukri/quick_apply.py`, `agent.py`)
-- **LinkedIn Easy Apply:** Autonomously detects Easy Apply modals, fills multi-step forms (experience years, radio buttons, dropdowns, resume attachment, disclosures), and uses token-tracked LLM assistance for custom screening questions.
-- **Naukri Quick Apply:** Seamlessly identifies modern Naukri `Quick apply` cards, matches role criteria, executes 1-click in-platform submission, handles screening questionnaires, and logs applied jobs.
-
-
-### Phase 2: External Enterprise ATS Portals (`portals/agent.py`, `external_portal_agent.py`)
-- Platform-agnostic engine that takes over when a job redirects to external company career portals (e.g., **Workday**, **Greenhouse**, **Lever**, **Taleo**, **iCIMS**, **Ashby**).
-- **Automated Portal Features:**
-  - **Account Creation / Login:** Detects authentication requirements and creates candidate portal accounts using configured credentials.
-  - **Resume Upload & Constraints:** Handles file upload triggers and automatically switches to optimized files if size limits (e.g., Workday 1MB) are detected.
-  - **Enterprise Field Pre-population:** Populates multi-section forms (Contact Details, Address, Work Authorization, EEO Demographics, Education & Employment History).
-  - **Multi-Step Progression:** Navigates multi-page Workday/ATS wizards with spinner synchronization and step-by-step progress tracking.
-
----
-
-
-## 🛠️ LinkedIn MCP Server Tools Overview
-
-The included universal Model Context Protocol server (`mcp.py`) exposes 30+ tools and operating guideline resources to AI coding environments (e.g., Antigravity, Cursor, Claude Code):
-
-### MCP Operating Guidelines Resources
-AI agents connected to this MCP server can read standard resources for cross-platform workflows:
-- `guidelines://cross-platform-workflow` — Complete guide on combining Naukri job discovery with LinkedIn recruiter mapping and DMs.
-- `guidelines://outbound-dm-templates` — Proven cold outreach templates referencing job URLs from Naukri or LinkedIn.
-- `guidelines://platform-capabilities` — Capabilities matrix comparing Naukri Quick Apply vs LinkedIn member graph.
-
-### Tools Overview
-
-| Tool Name | Engine | Description |
-|---|---|---|
-| `search_cross_platform_jobs` | Naukri + LinkedIn | Aggregates jobs from both platforms, tags origin (`[Platform: Naukri]` / `[Platform: LinkedIn]`), maps LinkedIn recruiters for each company, and provides pre-drafted DMs. |
-| `draft_recruiter_pitch` | Local Engine | Generates tailored outreach pitches for recruiters citing specific job URLs and platform origins. |
-| `get_intro` | Voyager API | Returns full name, headline, vanity URL, and occupation. |
-| `get_about` | Voyager API | Fetches profile about/summary section. |
-| `get_experience` | Voyager API | Lists all work experiences, company names, titles, and dates. |
-| `get_skills` | Voyager API | Retrieves all endorsed skills and proficiencies. |
-| `get_education` | Voyager API | Lists universities, degrees, and dates. |
-| `get_certifications` | Voyager API | Lists professional licenses and certifications. |
-| `get_unread_messages` | Voyager API | Retrieves unread direct message threads. |
-| `get_job_details` | Voyager API | Extracts structured title, company, description, and criteria for a job. |
-| `get_company_info` | Voyager API | Fetches employee count, headquarters, and industry for a company. |
-| `match_jobs_to_cv` | Voyager API | Compares current job listings against your CV text. |
-| `review_linkedin_against_cv`| Voyager API | Audits profile headline/summary/skills against a local CV. |
-| `search_recruiters` | Playwright | Finds active talent acquisition partners and recruiters for a company. |
-| `search_people_at_company` | Playwright | Finds employees matching a target role at a specific company. |
-| `find_person` | Playwright | Searches for individuals across 1st and public networks. |
-| `get_person_profile` | Voyager API | Inspects full public profile details for a person. |
-| `send_dm` | Playwright | Sends direct messages *(requires user confirmation)*. |
-| `connect_with_person` | Playwright | Dispatches connection requests with custom notes *(requires confirmation)*. |
-| `create_post` | Playwright | Publishes a LinkedIn feed post *(requires confirmation)*. |
-| `naukri_get_profile` | Playwright | Diagnostic check of Naukri session state and live candidate profile details. |
-| `naukri_search_jobs` | Playwright | Searches jobs on Naukri and returns structured cards with Quick Apply status. |
-| `naukri_search_recruiters` | Playwright | Discovers recruiters hiring on Naukri for target companies. |
-| `naukri_update_headline` | Playwright | Updates candidate resume headline on Naukri *(requires confirmation)*. |
-| `naukri_quick_apply` | Playwright | Submits Phase 1 Quick Apply applications on Naukri *(requires confirmation)*. |
-
-> **Safety Guard:** Any mutating or communication action (`send_dm`, `connect_with_person`, `create_post`, `update_*`, `naukri_update_headline`, `naukri_quick_apply`) strictly requires `confirmed=True` to prevent accidental actions.
-
-
-
----
-
-## 📦 Installation & Setup
-
-### 1. Prerequisites
-- Python 3.10+
-- Google Chrome or Chromium
-
-### 2. Install Dependencies
 ```bash
+# 1. Clone the repository
+git clone https://github.com/shubha95m/job-hunter.git
+cd job-hunter
+
+# 2. Create and activate a Python 3.10+ virtual environment
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate       # On macOS / Linux
+# .\venv\Scripts\activate      # On Windows (PowerShell)
+
+# 3. Upgrade pip and install all dependencies
+pip install --upgrade pip
 pip install -r requirements.txt
+
+# 4. Install Playwright browser binaries
 playwright install chromium
 ```
 
-### 3. One-Time Authentication
-Run the interactive login script for your platform of choice:
+---
+
+### Step 2: One-Time Authentication (Saved Locally)
+
+Run the login script once to capture your authenticated browser cookies:
 
 ```bash
-# Authenticate with LinkedIn (default)
+# Authenticate LinkedIn
 python auth.py --linkedin
 
-# Authenticate with Naukri
+# Authenticate Naukri
 python auth.py --naukri
 ```
-A visual browser window will open. Log into your account. Once logged in, close the browser window. Your authenticated session cookies will be stored locally in `.auth/` (`.auth/state.json` for LinkedIn, `.auth/naukri_state.json` for Naukri).
 
-> **Security Note:** `.auth/` and `.env` are strictly excluded in `.gitignore`. Never commit or publish session storage files.
+A browser window will open. Log into your account as usual. Once logged in, close the browser window.
+- Cookies are saved locally in `.auth/state.json` (LinkedIn) and `.auth/naukri_state.json` (Naukri).
+- **Security:** `.auth/` is strictly in `.gitignore` and never leaves your computer.
 
-### 4. Configure Your Profile
-Create your personal profile by copying the template:
+---
+
+### Step 3: Configure Your Candidate Profile
+
+Copy the template to create your personal profile:
+
 ```bash
 cp profile_template.yaml profiles/my_profile.yaml
 ```
-Configure your personal information, skills, job preferences, and Phase 2 external portal credentials in `profiles/my_profile.yaml`.
+
+Edit `profiles/my_profile.yaml` with your information:
+- **Contact Details:** Name, email, mobile phone, location.
+- **Job Preferences:** Target roles (`Staff SDET`, `Lead QA`), locations, min package.
+- **Standard Screening Answers:** Notice period (e.g. `30`), years of experience (e.g. `10`), legal authorization, visa sponsorship.
+- **Resume File / Web CV (Saved in local root folder):**
+  ```yaml
+  resume_path: "my_resume.pdf"
+  resume_under1mb_path: "my_resume.pdf"
+  ```
+  *(Store all CV PDFs directly in the local repository root directory — they are strictly git-ignored).*
 
 Set your active profile in `.env`:
 ```env
 PROFILE=my_profile
-GEMINI_API_KEY=your_gemini_api_key
-JOB_TIMEOUT_SECONDS=240
 ```
 
 ---
 
-## 🖥️ Usage
+### Step 4: Configure Visual SQLite Viewer in Your IDE
 
-### Running the Multi-Platform Job Application Agent
-Run the main runner to automatically search and apply for jobs on your desired platform:
+The CRM uses `applications.db` to guarantee zero data loss. To view and filter your jobs visually inside your editor:
 
-```bash
-# Run on LinkedIn (Phase 1 Easy Apply & Phase 2 ATS Portals)
-python main.py --linkedin
+1. Press `Cmd + Shift + X` (or `Ctrl + Shift + X`) to open the **Extensions** panel.
+2. Search for: **`SQLite Viewer`** (by Florian Klampfer / `qwtel.sqlite-viewer`).
+3. Click **Install**.
+4. Open the file tree and click on **`applications.db`**.
+   - It will open as an interactive, sortable, filterable spreadsheet directly in your editor tab!
+   - You can toggle between `wishlist`, `applications`, and `touchpoint_logs` with a single click.
 
-# Run on Naukri
-python main.py --naukri
+> **Zero Sync Worries:** `applications.db` and [applications_tracker.json](applications_tracker.json) are automatically mirrored in real-time on every single write. If you prefer JSON, just open `applications_tracker.json`!
 
-# Additional options
-python main.py --linkedin --profile my_profile --max-apps 20 --headless
-```
+---
 
-### Connecting the Universal Recruiter MCP Server to Your AI IDE
+## 🔌 Connecting MCP in AI IDEs (Antigravity, Cursor, Windsurf, Claude)
 
-Once you have completed the one-time authentication (`python auth.py`), you can connect `mcp.py` to any AI coding assistant or IDE supporting the Model Context Protocol (**Cursor**, **Claude Desktop**, **Antigravity**, **Codex**, or **Windsurf**). The single `mcp.py` server manages recruiter discovery, candidate messaging, and job intelligence across all supported platforms (LinkedIn, Naukri, and external portals).
+The universal MCP server exposes 30+ tools for recruiter searches, messaging, application logging, and Wishlist management.
 
-#### Step 1: Note your repository path
-In your terminal, navigate to the cloned `job-hunter` directory and run:
+Get your absolute repository path by running:
 ```bash
 pwd
-# Example output: /Users/<your-username>/projects/job-hunter
+# Example: /Users/username/job-hunter
 ```
-Note the path to your repository and virtual environment Python interpreter:
-- **macOS / Linux:** `<path-to-job-hunter>/venv/bin/python`
-- **Windows:** `<path-to-job-hunter>\venv\Scripts\python.exe`
+
+### 1. Google Antigravity IDE
+Add the MCP configuration to `.agents/mcp_config.json` (workspace) or `~/.gemini/config/mcp_config.json` (global):
+
+```json
+{
+  "mcpServers": {
+    "job-hunter": {
+      "command": "/Users/username/job-hunter/venv/bin/python3",
+      "args": ["/Users/username/job-hunter/mcp_engine/server.py"],
+      "env": {
+        "PYTHONPATH": "/Users/username/job-hunter"
+      }
+    }
+  }
+}
+```
+
+### 2. Cursor
+Go to **Cursor Settings** ➔ **Features** ➔ **MCP Servers** ➔ click **Add New MCP Server**, or edit `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "job-hunter": {
+      "command": "/Users/username/job-hunter/venv/bin/python3",
+      "args": ["/Users/username/job-hunter/mcp_engine/server.py"],
+      "env": {
+        "PYTHONPATH": "/Users/username/job-hunter"
+      }
+    }
+  }
+}
+```
+
+### 3. Claude Desktop
+Add under `"mcpServers"` in:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "job-hunter": {
+      "command": "/Users/username/job-hunter/venv/bin/python3",
+      "args": ["/Users/username/job-hunter/mcp_engine/server.py"]
+    }
+  }
+}
+```
+
+### 4. Windsurf / VS Code (Roo Code / Cline)
+Add under your MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "job-hunter": {
+      "command": "/Users/username/job-hunter/venv/bin/python3",
+      "args": ["/Users/username/job-hunter/mcp_engine/server.py"]
+    }
+  }
+}
+```
 
 ---
 
-#### Step 2: Add Configuration to Your IDE
+## 💬 How to Use in Your AI IDE: Ready-to-Use Prompts
 
-##### 🔹 Cursor
-1. Go to **Cursor Settings** > **Features** > **MCP Servers** > click **Add New MCP Server**.
-2. Or directly edit/create `~/.cursor/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "recruiter-hunter": {
-      "command": "<path-to-job-hunter>/venv/bin/python",
-      "args": [
-        "<path-to-job-hunter>/mcp.py"
-      ],
-      "env": {
-        "PYTHONPATH": "<path-to-job-hunter>"
-      }
-    }
-  }
-}
-```
+Once open in your AI IDE, you don't need to write manual scripts — just prompt your AI assistant naturally:
 
-##### 🔹 Google Antigravity
-Add the server configuration to your global config (`~/.gemini/config/mcp_config.json`) or workspace root (`.agents/mcp_config.json`):
-```json
-{
-  "mcpServers": {
-    "recruiter-hunter": {
-      "command": "<path-to-job-hunter>/venv/bin/python",
-      "args": [
-        "<path-to-job-hunter>/mcp.py"
-      ],
-      "env": {
-        "PYTHONPATH": "<path-to-job-hunter>"
-      }
-    }
-  }
-}
-```
+### 1. Job Discovery & Wishlist (High Package Filter)
+> *"Search for Staff SDET or Quality Architect jobs in Pune and Remote paying over ₹1 Crore (or $120k+ USD). Save the best matching opportunities into my Wishlist with package notes."*
 
-##### 🔹 Claude Desktop
-Open your Claude Desktop configuration file:
-- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+### 2. Single-Page Web CV Setup
+> *"Download my single-page web resume from my portfolio URL, compile it to an A4 PDF under 200 KB in the local root folder, and set it as my active CV in my profile."*
 
-Add the server under `mcpServers`:
-```json
-{
-  "mcpServers": {
-    "recruiter-hunter": {
-      "command": "<path-to-job-hunter>/venv/bin/python",
-      "args": [
-        "<path-to-job-hunter>/mcp.py"
-      ],
-      "env": {
-        "PYTHONPATH": "<path-to-job-hunter>"
-      }
-    }
-  }
-}
-```
+### 3. Applying to Wishlist Jobs
+> *"Look at my Wishlist. For all jobs where Easy Apply is True, apply to them headlessly in Playwright using my single-page CV, then verify they are moved to the Applied pipeline."*
 
-##### 🔹 Codex / Windsurf / VS Code (Roo Code / Cline)
-In your MCP settings or plugin JSON configuration:
-```json
-{
-  "mcpServers": {
-    "recruiter-hunter": {
-      "command": "<path-to-job-hunter>/venv/bin/python",
-      "args": [
-        "<path-to-job-hunter>/mcp.py"
-      ],
-      "env": {
-        "PYTHONPATH": "<path-to-job-hunter>"
-      }
-    }
-  }
-}
-```
+### 4. Recruiter Discovery & Cadence Follow-Ups
+> *"Check my application tracker. Are there any recruiter follow-ups due today? If so, find the hiring recruiter for that company on LinkedIn and draft a warm 300-character connection note."*
 
-*(Note: `linkedin_mcp.py` is also retained as a direct backward-compatible runner for existing setups).*
-
-```
-
-> **Tip:** Replace `<path-to-job-hunter>` with the absolute path returned by `pwd` on your machine.
-
+### 5. Check Pipeline & Sync Health
+> *"Show me a summary of my active pipeline, breakdown by platform, and confirm that `applications.db` and `applications_tracker.json` are in sync."*
 
 ---
 
-## 🔒 100% Local & Secure (No Database, No Remote Backend)
+## 🆘 "What If Something Fails?" (How to Ask Your AI)
 
-- **100% Local Execution:** Everything runs entirely on your local machine.
-- **No Remote Servers or Databases:** There is zero external telemetry, no remote backend, and no third-party database tracking or collecting your information.
-- **Session Stored Exclusively on Your Machine:** Your LinkedIn authentication cookies are stored locally in `.auth/state.json`. They never leave your system and are strictly ignored by `.gitignore`.
-- **Private & Safe by Design:** Feel completely free to leverage full agentic capabilities to search recruiters, tailor profiles, and apply for jobs knowing that your credentials, resumes, and personal data stay strictly under your control.
+If you hit a roadblock (e.g. cookie expired, modal stuck, or custom portal), simply ask your AI IDE with these exact prompt patterns:
 
-### Best Practices & Guardrails:
-- **Resumes & PII:** Resume PDFs (`*.pdf`), custom profile YAMLs (`profiles/*.yaml`), and session states (`.auth/`) are ignored by Git.
-- **Reference Profile:** Always use `profiles/dummy_profile.yaml` for testing and public templates.
-- **Safety Approvals:** High-impact operations in the MCP server (`send_dm`, `connect_with_person`, `create_post`) strictly require user confirmation (`confirmed=True`).
+| Problem | Prompt to Give Your AI IDE |
+|---|---|
+| **LinkedIn or Naukri logged out** | *"My session expired. Can you launch `python auth.py --linkedin` so I can log in and save fresh cookies?"* |
+| **New questionnaire question** | *"The application modal is asking a custom question about salary expectation. Can you update `profiles/my_profile.yaml` with my answer and retry?"* |
+| **Want to sync manual edits** | *"I edited `applications_tracker.json` manually to add notes. Run `./venv/bin/python3 runtime/crm.py --sync-from-json` to sync them into `applications.db`."* |
+| **Need to inspect database** | *"Run `sqlite3 -header -table applications.db 'SELECT id, company, role_title, package FROM wishlist;'` and show me what's stored."* |
+
+---
+
+## ✅ Verification & Success Checklist
+
+Run this command anytime to verify your CRM health:
+
+```bash
+./venv/bin/python3 runtime/crm.py
+```
+
+Expected output:
+```json
+CRM Status (SQLite & JSON in Sync):
+{
+  "total_applications_tracked": 1,
+  "active_pipeline": 1,
+  "total_wishlist_saved": 2,
+  "pending_followups_due": 0,
+  "breakdown_by_status": {
+    "APPLIED": 1
+  },
+  "breakdown_by_platform": {
+    "LinkedIn": 1
+  },
+  "database_path": ".../job-hunter/applications.db",
+  "json_tracker_path": ".../job-hunter/applications_tracker.json"
+}
+```
+
+🎉 **Great! You have completed the setup and are ready to hunt jobs autonomously!** 🚀

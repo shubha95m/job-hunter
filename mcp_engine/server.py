@@ -25,6 +25,7 @@ finally:
 from mcp_engine.safety import check_safety_guard
 from runtime.session_store import get_state_file
 from runtime.browser_pool import browser_pool
+from runtime import crm
 from platforms.linkedin import api as linkedin_api
 from platforms.linkedin import dom as linkedin_dom
 from platforms.naukri.api import NaukriAPIClient
@@ -54,6 +55,19 @@ Core Operating Principles & Cross-Platform Synergy:
      Use send_dm or connect_with_person on LinkedIn.
      Reference the specific role, platform source, and job URL in the message.
    - STRICT SAFETY GUARD: Never send messages, connection requests, or modify profiles without user confirmation (confirmed=True). Always show the draft to the user first.
+
+4. Connection & Network Management:
+   - Check connection status using check_connection_status(person_name_or_url=...) or get_connections(limit=...).
+   - Check pending invitations sent to others that haven't been accepted using get_sent_invitations().
+   - Cancel/withdraw pending sent requests using withdraw_sent_invitation(person_name_or_url=..., confirmed=True).
+   - Check incoming connection invitations with get_received_invitations() and accept or decline with respond_to_invitation(person_name_or_url=..., action='accept'|'decline', confirmed=True).
+   - STRICT SAFETY GUARD: Sending requests, accepting/declining, or withdrawing requests requires confirmed=True with user approval.
+
+5. Wishlist & "Will Do Later" Queue:
+   - When jobs are discovered via search_jobs, naukri_search_jobs, or search_cross_platform_jobs, present the results clearly to the user.
+   - Always offer or ask the user if they want to keep any of the positions in their Wishlist (`add_to_wishlist`). If yes, record them so the user can review and apply later. If no, do not add.
+   - Users can view their bookmarked opportunities anytime with `get_wishlist()`.
+   - When ready to apply, use `convert_wishlist_to_applied(job_id_or_company)` to transition the job into the active application pipeline and begin recruiter cadence tracking.
 """
 
 mcp = MCPServer("job-hunter-mcp", instructions=SERVER_INSTRUCTIONS)
@@ -112,8 +126,8 @@ Given my background as a Staff SDET / QA Lead with nearly a decade of experience
 I'd welcome the opportunity to share my resume and discuss how my expertise can drive impact for {company}.
 
 Best regards,
-Shubham Kumar Sharma
-Portfolio: https://shubha95m.github.io/shubham-sharma/resume.html"
+[Your Name]
+Portfolio: [Your Portfolio URL]"
 """
 
 
@@ -732,6 +746,236 @@ def connect_with_person(person_name_or_url: str, custom_note: Optional[str] = No
 
 
 @mcp.tool()
+def get_connections(limit: int = 50, start: int = 0, sort_by: str = "RECENTLY_ADDED") -> str:
+    """[READ-ONLY] Retrieve candidate's 1st-degree LinkedIn connections (name, headline, public identifier, profile URL)."""
+    try:
+        data = linkedin_api.get_connections(limit=limit, start=start, sort_by=sort_by)
+        return json.dumps({"total_returned": len(data), "connections": data}, indent=2)
+    except Exception as e:
+        return f"Error retrieving LinkedIn connections: {str(e)}"
+
+
+@mcp.tool()
+def check_connection_status(person_name_or_url: str) -> str:
+    """[READ-ONLY] Check relationship and connection status with any person on LinkedIn (1st-degree connected, pending request sent, or not connected)."""
+    try:
+        data = asyncio.run(linkedin_dom.check_connection_status(person_name_or_url=person_name_or_url))
+        return json.dumps(data, indent=2)
+    except Exception as e:
+        return f"Error checking connection status: {str(e)}"
+
+
+@mcp.tool()
+def get_sent_invitations(limit: int = 50, start: int = 0) -> str:
+    """[READ-ONLY] Retrieve all pending connection requests sent by you to others that have not yet been accepted."""
+    try:
+        data = linkedin_api.get_sent_invitations(limit=limit, start=start)
+        return json.dumps({"total_pending": len(data), "sent_invitations": data}, indent=2)
+    except Exception as e:
+        return f"Error retrieving sent invitations: {str(e)}"
+
+
+@mcp.tool()
+def withdraw_sent_invitation(person_name_or_url: str, confirmed: bool = False) -> str:
+    """[REQUIRES USER APPROVAL] Withdraw/cancel a pending connection invitation that you previously sent to a person."""
+    guard = check_safety_guard("withdraw_sent_invitation", {"target": person_name_or_url}, confirmed)
+    if guard:
+        return guard
+    try:
+        res = asyncio.run(linkedin_dom.withdraw_sent_invitation(person_name_or_url=person_name_or_url))
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error withdrawing sent invitation: {str(e)}"
+
+
+@mcp.tool()
+def get_received_invitations(limit: int = 20) -> str:
+    """[READ-ONLY] Retrieve all pending incoming connection requests sent to you by other people."""
+    try:
+        data = asyncio.run(linkedin_dom.get_received_invitations(limit=limit))
+        return json.dumps({"total_received": len(data), "received_invitations": data}, indent=2)
+    except Exception as e:
+        return f"Error retrieving received invitations: {str(e)}"
+
+
+@mcp.tool()
+def respond_to_invitation(person_name_or_url: str, action: str, confirmed: bool = False) -> str:
+    """[REQUIRES USER APPROVAL] Accept or decline/ignore an incoming LinkedIn connection invitation. Action must be 'accept' or 'decline'/'ignore'."""
+    guard = check_safety_guard("respond_to_invitation", {"target": person_name_or_url, "action": action}, confirmed)
+    if guard:
+        return guard
+    try:
+        res = asyncio.run(linkedin_dom.respond_to_invitation(person_name_or_url=person_name_or_url, action=action))
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error responding to invitation: {str(e)}"
+
+
+# ==============================================================================
+# Application CRM & Recruiter Touchpoint Cadence Tools
+# ==============================================================================
+
+@mcp.tool()
+def get_application_pipeline(status: Optional[str] = None, company: Optional[str] = None, limit: int = 50) -> str:
+    """[READ-ONLY] Retrieve tracked job applications, active pipeline stages, statistical summary, and days elapsed."""
+    try:
+        summary = crm.get_pipeline_summary()
+        apps = crm.get_pipeline(status=status, company=company, limit=limit)
+        return json.dumps({
+            "summary": summary,
+            "total_returned": len(apps),
+            "applications": apps
+        }, indent=2)
+    except Exception as e:
+        return f"Error retrieving application pipeline: {str(e)}"
+
+
+@mcp.tool()
+def log_job_application(
+    job_url: str,
+    company: str,
+    role_title: str,
+    platform: str = "LinkedIn",
+    location: Optional[str] = None,
+    package: Optional[str] = None,
+    notes: Optional[str] = None
+) -> str:
+    """[LOCAL CRM] Manually record a job application into the local SQLite CRM and atomic JSON mirror."""
+    try:
+        res = crm.record_application(
+            job_url=job_url,
+            company=company,
+            role_title=role_title,
+            platform=platform,
+            location=location,
+            package=package,
+            notes=notes
+        )
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error logging job application: {str(e)}"
+
+
+@mcp.tool()
+def update_application_status(
+    job_id_or_company: str,
+    status: str,
+    notes: Optional[str] = None,
+    recruiter_name: Optional[str] = None,
+    recruiter_profile_url: Optional[str] = None
+) -> str:
+    """[LOCAL CRM] Update an application's status (APPLIED, TOUCHPOINT_1_CONNECT_SENT, TOUCHPOINT_2_FOLLOWUP_SENT, INTERVIEW_SCHEDULED, REJECTED, OFFER, CLOSED) and append notes."""
+    try:
+        res = crm.update_application_status(
+            job_key_or_url_or_id=job_id_or_company,
+            status=status,
+            notes=notes,
+            recruiter_name=recruiter_name,
+            recruiter_profile_url=recruiter_profile_url
+        )
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error updating application status: {str(e)}"
+
+
+@mcp.tool()
+def add_to_wishlist(
+    job_url: str,
+    company: str,
+    role_title: str,
+    platform: str = "LinkedIn",
+    location: Optional[str] = None,
+    package: Optional[str] = None,
+    easy_apply: bool = False,
+    notes: Optional[str] = None
+) -> str:
+    """[LOCAL CRM] Save an interesting job to your Wishlist / Will-Do-Later queue to apply later."""
+    try:
+        res = crm.add_to_wishlist(
+            job_url=job_url,
+            company=company,
+            role_title=role_title,
+            platform=platform,
+            location=location,
+            package=package,
+            easy_apply=easy_apply,
+            notes=notes
+        )
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error adding job to wishlist: {str(e)}"
+
+
+@mcp.tool()
+def get_wishlist(platform: Optional[str] = None, limit: int = 50) -> str:
+    """[READ-ONLY] Retrieve all bookmarked jobs in your Wishlist / Will-Do-Later queue."""
+    try:
+        items = crm.get_wishlist(platform=platform, limit=limit)
+        return json.dumps({
+            "total_wishlist_items": len(items),
+            "wishlist": items
+        }, indent=2)
+    except Exception as e:
+        return f"Error retrieving wishlist: {str(e)}"
+
+
+@mcp.tool()
+def remove_from_wishlist(job_id_or_url_or_company: str) -> str:
+    """[LOCAL CRM] Remove a job from your Wishlist / Will-Do-Later queue."""
+    try:
+        res = crm.remove_from_wishlist(job_id_or_url_or_company)
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error removing from wishlist: {str(e)}"
+
+
+@mcp.tool()
+def convert_wishlist_to_applied(job_id_or_url_or_company: str, notes: Optional[str] = None) -> str:
+    """[LOCAL CRM] Transition a wishlisted job to the active APPLIED pipeline and start recruiter follow-up cadence."""
+    try:
+        res = crm.convert_wishlist_to_applied(job_id_or_url_or_company, notes=notes)
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error converting wishlist item to applied: {str(e)}"
+
+
+@mcp.tool()
+def get_pending_cadence_followups() -> str:
+    """[READ-ONLY] Scan all tracked applications against the Recruiter Cadence engine (Day 2+ Connect, Day 7+ Follow-up DM, 24h deduplication guard). Returns ready-to-send personalized drafts."""
+    try:
+        actions = crm.get_pending_cadence_actions()
+        return json.dumps({
+            "total_pending_actions": len(actions),
+            "cadence_schedule": actions
+        }, indent=2)
+    except Exception as e:
+        return f"Error calculating cadence followups: {str(e)}"
+
+
+@mcp.tool()
+def execute_recruiter_cadence(
+    application_id_or_company: str,
+    recruiter_name_or_url: Optional[str] = None,
+    confirmed: bool = False
+) -> str:
+    """[REQUIRES USER APPROVAL] Execute the next scheduled touchpoint (discover recruiter, send warm connection note, or follow-up DM) with 24h company deduplication guard."""
+    guard = check_safety_guard("execute_recruiter_cadence", {
+        "target_application": application_id_or_company,
+        "recruiter_override": recruiter_name_or_url or "Auto-discover top recruiter at company"
+    }, confirmed)
+    if guard:
+        return guard
+    try:
+        res = asyncio.run(crm.execute_cadence_action(
+            application_id_or_company=application_id_or_company,
+            recruiter_name_or_url=recruiter_name_or_url
+        ))
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error executing recruiter cadence: {str(e)}"
+
+
+@mcp.tool()
 def get_job_details(job_id_or_url: str) -> str:
     """[READ-ONLY] Get full details, complete description, location, and seniority level for a LinkedIn job."""
     try:
@@ -1021,8 +1265,8 @@ Given my background as a Staff SDET / QA Lead with nearly a decade of experience
 I'd welcome the opportunity to share my resume and discuss how my expertise can drive impact for {company}.
 
 Best regards,
-Shubham Kumar Sharma
-Portfolio: https://shubha95m.github.io/shubham-sharma/resume.html"""
+[Candidate Name]
+Portfolio: [Portfolio Link]"""
 
     return json.dumps({
         "company": company,
