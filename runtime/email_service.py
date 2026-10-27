@@ -152,19 +152,42 @@ def send_email(
                 pass
 
     try:
-        if smtp_port == 465:
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL(smtp_host, smtp_port, context=context, timeout=30) as server:
-                server.login(sender, app_password)
-                server.sendmail(sender, [target_to], msg.as_string())
-        else:
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
-                server.ehlo()
+        sent = False
+        last_err = None
+
+        # Attempt 1: Configured port
+        try:
+            if smtp_port == 465:
                 context = ssl.create_default_context()
-                server.starttls(context=context)
-                server.ehlo()
-                server.login(sender, app_password)
-                server.sendmail(sender, [target_to], msg.as_string())
+                with smtplib.SMTP_SSL(smtp_host, smtp_port, context=context, timeout=60) as server:
+                    server.login(sender, app_password)
+                    server.sendmail(sender, [target_to], msg.as_string())
+                    sent = True
+            else:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=60) as server:
+                    server.ehlo()
+                    context = ssl.create_default_context()
+                    server.starttls(context=context)
+                    server.ehlo()
+                    server.login(sender, app_password)
+                    server.sendmail(sender, [target_to], msg.as_string())
+                    sent = True
+        except Exception as e:
+            last_err = e
+
+        # Attempt 2: Resilient fallback to Port 587 STARTTLS if port 465 connection drops
+        if not sent:
+            try:
+                with smtplib.SMTP("smtp.gmail.com", 587, timeout=60) as server:
+                    server.ehlo()
+                    context = ssl.create_default_context()
+                    server.starttls(context=context)
+                    server.ehlo()
+                    server.login(sender, app_password)
+                    server.sendmail(sender, [target_to], msg.as_string())
+                    sent = True
+            except Exception as e:
+                raise last_err or e
 
         return {
             "status": "success",

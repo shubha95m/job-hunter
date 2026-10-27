@@ -1374,16 +1374,23 @@ def send_interview_prep_email(
         # 3. Render PDF artifact
         asyncio.run(intelligence.render_dossier_pdf(html_content, str(pdf_path)))
 
-        # 4. Check for cover letter to attach if present
+        # 4. Auto-generate targeted single-page cover letter if not present and attach
+        cl_pdf = BASE_DIR / f"Targeted_Cover_Letter_{clean_name}.pdf"
+        if not cl_pdf.is_file():
+            try:
+                cl_res = intelligence.generate_targeted_cover_letter(
+                    company_name,
+                    role_title=role_title or dossier.get("role_title"),
+                    output_format="pdf"
+                )
+                if cl_res.get("single_page_pdf_path"):
+                    cl_pdf = Path(cl_res["single_page_pdf_path"])
+            except Exception:
+                pass
+
         attachments = [str(pdf_path)]
-        cl_pattern = BASE_DIR / f"Targeted_Cover_Letter_{clean_name}.pdf"
-        if cl_pattern.is_file():
-            attachments.append(str(cl_pattern))
-        else:
-            for f in os.listdir(BASE_DIR):
-                if f.startswith("Targeted_Cover_Letter_") and f.endswith(".pdf"):
-                    attachments.append(str(BASE_DIR / f))
-                    break
+        if cl_pdf.is_file():
+            attachments.append(str(cl_pdf))
 
         # 5. Dispatch email
         subject = f"Deep Technical Interview Intelligence Dossier: {company_name}"
