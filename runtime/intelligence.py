@@ -1006,10 +1006,20 @@ async def generate_interview_dossier(
         }
     ]
 
+    # 2.5 Real-Time Web Research via Google Search Grounding (Hybrid 1st Priority)
+    from runtime.web_research import research_company_interview_intelligence
+    web_research = research_company_interview_intelligence(
+        company_name=clean_comp,
+        role_title=target_role,
+        location=job_location or "Pune",
+        yoe=candidate.get("years_of_experience", 8.0),
+        candidate_skills=candidate.get("skills", [])
+    )
+
     # 3. Fully Dynamic Multi-Category Interview Battery Generation
     # Generates 12-15 Verbal/Architectural questions, 10 Coding Challenges, 5 Managerial questions, and 3 Reverse questions
     from runtime.interview_battery import build_interview_battery
-    battery = build_interview_battery(candidate, clean_comp, target_role, full_text)
+    battery = build_interview_battery(candidate, clean_comp, target_role, full_text, web_research=web_research)
 
     verbal_questions = battery.get("verbal_questions", [])
     coding_challenges = battery.get("coding_challenges", [])
@@ -1083,7 +1093,12 @@ async def generate_interview_dossier(
             f"Equipped with {candidate['years_of_experience']} years of {candidate['primary_title']} experience, "
             f"mastery in {', '.join(candidate['skills'][:4])}, and proven enterprise project impact, "
             f"you are positioned as an impactful technical leader capable of accelerating {clean_comp}'s release velocity and engineering goals."
-        )
+        ),
+        "verified_rounds": battery.get("verified_rounds", []),
+        "real_coding_patterns_reported": battery.get("real_coding_patterns_reported", []),
+        "real_system_design_scenarios": battery.get("real_system_design_scenarios", []),
+        "location_insights": battery.get("location_specific_insights", "") or (web_research.get("location_specific_insights") if web_research else ""),
+        "web_research_grounded": battery.get("web_research_grounded", False)
     }
 
 
@@ -1104,6 +1119,21 @@ def format_dossier_html(dossier_data: Dict[str, Any]) -> str:
     reverse_q = dossier_data.get("strategic_reverse_interview_questions", [])
 
     import html as html_lib
+
+    verified_rounds = dossier_data.get("verified_rounds", [])
+    location_insights = dossier_data.get("location_insights", "")
+    web_grounded = dossier_data.get("web_research_grounded", False)
+
+    rounds_html = []
+    for r in verified_rounds:
+        r_name = html_lib.escape(r.get("round", "Interview Round"))
+        r_focus = html_lib.escape(r.get("focus", ""))
+        rounds_html.append(f"""
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+          <div style="font-size: 12.5px; font-weight: 700; color: #1e293b; margin-bottom: 3px;">📌 {r_name}</div>
+          <div style="font-size: 11.5px; color: #475569; line-height: 1.45;">{r_focus}</div>
+        </div>
+        """)
 
     q_cards_html = []
     for i, q in enumerate(verbals, 1):
@@ -1416,10 +1446,21 @@ def format_dossier_html(dossier_data: Dict[str, Any]) -> str:
       <b>Scrutiny Rationale:</b><br>
       {dossier_data.get('planner_thinking', {}).get('scrutiny_rationale', 'Calibrated to evaluate candidate at Staff Engineer & Technical Architect level.')}
     </div>
-    <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">Evaluation Pillars Configured for Target Role:</div>
     <ul style="margin: 0; padding-left: 20px; font-size: 12.5px; color: #475569;">
       {"".join([f"<li>{p}</li>" for p in dossier_data.get('planner_thinking', {}).get('preparation_pillars', [])])}
     </ul>
+    {f'''
+    <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #cbd5e1;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
+        <div style="font-size: 13px; font-weight: 700; color: #0f172a;">🌐 Verified Interview Loop (Grounded via Live Web Search & Glassdoor/LeetCode)</div>
+        <span style="background: #e0f2fe; color: #0369a1; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Live Debrief Grounding</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px;">
+        {''.join(rounds_html)}
+      </div>
+      {f'<div style="margin-top: 10px; font-size: 12px; color: #475569; background: #ffffff; border-left: 3px solid #0284c7; padding: 8px 12px; border-radius: 0 4px 4px 0;"><b>Location & Pod Context ({dossier_data.get("job_metadata", {}).get("location", "Pune")}):</b> {location_insights}</div>' if location_insights else ''}
+    </div>
+    ''' if rounds_html else ''}
   </div>
 
   <!-- SECTION 3: LEADERSHIP DISCOVERY -->

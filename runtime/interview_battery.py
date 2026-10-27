@@ -17,10 +17,12 @@ def build_interview_battery(
     candidate: Dict[str, Any],
     company_name: str,
     role_title: str,
-    full_text: str
+    full_text: str,
+    web_research: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
-    Constructs a calibrated interview battery based on candidate profile and target JD.
+    Constructs a calibrated interview battery based on candidate profile,
+    target JD, and verified live web search intelligence.
     """
     skills = [s.lower() for s in candidate.get("skills", [])]
     primary_skills = candidate.get("skills", ["Java", "Spring Boot", "Microservices", "SQL"])
@@ -32,11 +34,11 @@ def build_interview_battery(
     is_backend_java = any("java" in s for s in skills) or "java" in role_lower or "backend" in role_lower
 
     if is_backend_java and not is_qa_sdet:
-        return _build_java_backend_battery(candidate, company_name, role_title, full_text, yoe)
+        return _build_java_backend_battery(candidate, company_name, role_title, full_text, yoe, web_research=web_research)
     elif is_qa_sdet:
-        return _build_sdet_qa_battery(candidate, company_name, role_title, full_text, yoe)
+        return _build_sdet_qa_battery(candidate, company_name, role_title, full_text, yoe, web_research=web_research)
     else:
-        return _build_general_backend_battery(candidate, company_name, role_title, full_text, yoe)
+        return _build_general_backend_battery(candidate, company_name, role_title, full_text, yoe, web_research=web_research)
 
 
 def _build_java_backend_battery(
@@ -44,9 +46,10 @@ def _build_java_backend_battery(
     company: str,
     role: str,
     full_text: str,
-    yoe: float
+    yoe: float,
+    web_research: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """Builds a rigorous Java 17+, Spring Boot, Concurrency & Microservices battery."""
+    """Builds a rigorous Java 17+, Spring Boot, Concurrency & Microservices battery enriched with live web research."""
 
     # 1. 12-15 VERBAL & CONCEPTUAL QUESTIONS ACROSS 4 TIERS
     verbals = [
@@ -905,7 +908,12 @@ public class OutboxPublisherWorker {
         "verbal_questions": verbals,
         "coding_challenges": coding_challenges,
         "managerial_questions": managerial,
-        "reverse_questions": reverse
+        "reverse_questions": reverse,
+        "verified_rounds": web_research.get("verified_rounds", []) if web_research else [],
+        "real_coding_patterns_reported": web_research.get("real_coding_patterns_reported", []) if web_research else [],
+        "real_system_design_scenarios": web_research.get("real_system_design_scenarios", []) if web_research else [],
+        "location_specific_insights": web_research.get("location_specific_insights", "") if web_research else "",
+        "web_research_grounded": True if web_research and web_research.get("status") == "SUCCESS" else False
     }
 
 
@@ -914,12 +922,11 @@ def _build_sdet_qa_battery(
     company: str,
     role: str,
     full_text: str,
-    yoe: float
+    yoe: float,
+    web_research: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Builds a comprehensive SDET / QA Automation battery."""
-    # (Similarly returns 12-15 verbals, 10 SDET coding challenges, 5 managerial, 3 reverse)
-    # Re-uses the robust SDET battery
-    return _build_java_backend_battery(candidate, company, role, full_text, yoe)
+    return _build_java_backend_battery(candidate, company, role, full_text, yoe, web_research=web_research)
 
 
 def _build_general_backend_battery(
@@ -927,7 +934,8 @@ def _build_general_backend_battery(
     company: str,
     role: str,
     full_text: str,
-    yoe: float
+    yoe: float,
+    web_research: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Fallback general backend battery."""
-    return _build_java_backend_battery(candidate, company, role, full_text, yoe)
+    return _build_java_backend_battery(candidate, company, role, full_text, yoe, web_research=web_research)
