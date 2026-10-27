@@ -1369,20 +1369,20 @@ def send_interview_prep_email(
         # 2. Format rich IDE-styled HTML
         html_content = intelligence.format_dossier_html(dossier)
         clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', company_name.strip())
-        pdf_filename = f"{clean_name}_Comprehensive_Interview_Dossier.pdf"
+        pdf_path = BASE_DIR / f"{clean_name}_Comprehensive_Interview_Dossier.pdf"
 
         # 3. Render PDF artifact
-        asyncio.run(intelligence.render_dossier_pdf(html_content, pdf_filename))
+        asyncio.run(intelligence.render_dossier_pdf(html_content, str(pdf_path)))
 
         # 4. Check for cover letter to attach if present
-        attachments = [pdf_filename]
-        cl_pattern = f"Targeted_Cover_Letter_{clean_name}.pdf"
-        if os.path.isfile(cl_pattern):
-            attachments.append(cl_pattern)
+        attachments = [str(pdf_path)]
+        cl_pattern = BASE_DIR / f"Targeted_Cover_Letter_{clean_name}.pdf"
+        if cl_pattern.is_file():
+            attachments.append(str(cl_pattern))
         else:
-            for f in os.listdir("."):
+            for f in os.listdir(BASE_DIR):
                 if f.startswith("Targeted_Cover_Letter_") and f.endswith(".pdf"):
-                    attachments.append(f)
+                    attachments.append(str(BASE_DIR / f))
                     break
 
         # 5. Dispatch email
@@ -1400,7 +1400,7 @@ def send_interview_prep_email(
             "role": dossier.get("role_title"),
             "questions_prepared": len(dossier.get("high_probability_technical_questions", [])),
             "email_dispatch": res,
-            "pdf_generated": pdf_filename
+            "pdf_generated": str(pdf_path)
         }, indent=2)
     except Exception as e:
         return f"Error executing send_interview_prep_email: {str(e)}"

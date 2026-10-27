@@ -5,6 +5,7 @@ import asyncio
 import yaml
 import urllib.parse
 from datetime import datetime
+from pathlib import Path
 from playwright.async_api import async_playwright, Page, BrowserContext
 from dotenv import load_dotenv
 from browser import get_browser, get_context, save_state
@@ -19,7 +20,10 @@ JOB_TIMEOUT_SECONDS = int(os.getenv("JOB_TIMEOUT_SECONDS", "240"))
 
 def load_profile(profile_override: str = None):
     profile_name = profile_override or os.getenv("PROFILE", "dummy_profile")
-    profile_path = os.path.join("profiles", f"{profile_name}.yaml")
+    base_dir = Path(__file__).resolve().parent
+    profile_path = str(base_dir / "profiles" / f"{profile_name}.yaml")
+    if not os.path.exists(profile_path):
+        profile_path = os.path.join("profiles", f"{profile_name}.yaml")
     if not os.path.exists(profile_path):
         print(f"ERROR: Profile not found at '{profile_path}'. Check your PROFILE setting in .env.")
         raise FileNotFoundError(profile_path)
