@@ -11,8 +11,10 @@ An autonomous, multi-platform job application engine, personal CRM, and Model Co
 - ⭐ **Opportunity Wishlist & Package Tracking:** Search high-paying roles (e.g., > ₹1 Crore / $120k+ USD), bookmark them in a Wishlist with salary notes, and apply when ready.
 - 🔄 **Auto-Purge on Apply:** When you apply to a wishlisted job, it is automatically removed from the Wishlist, moved to active Applications, and inherits its package/notes.
 - 🤝 **Recruiter Touchpoint Cadence Engine:** Day 0 (Applied) ➔ Day 2 (Warm Recruiter Connection) ➔ Day 7 (Follow-up DM) with a 24-hour company deduplication guard.
-- 📄 **Single-Page Dynamic CV Rendering:** Automatically fetches and compiles your web resume/portfolio into an ATS-compliant, single-page PDF (< 200 KB) and attaches it on the fly.
-- 🔒 **100% Private & Git-Safe:** All sessions (`.auth/`), databases (`applications.db`), trackers, and personal resumes (`*.pdf`) are strictly excluded in `.gitignore`.
+- 🎯 **Keyword Gap Audit & Compatibility Scorer:** Tool `audit_job_compatibility` contrasts your profile against any job description, scores compatibility, reveals missing keyword gaps, and crafts interview talking points.
+- 📝 **Strict Single-Page Targeted Cover Letter:** Tool `generate_targeted_cover_letter` drafts tailored 3-paragraph executive pitches (Crossplane, Playwright MCP, Kubernetes test runners) and renders crisp, strictly 1-page A4 PDFs with zero truncation.
+- 🏢 **Automated Interview Prep & Company Dossier:** Tool `generate_interview_dossier` compiles Product vs Service intel, funding/valuation, leadership, recent/upcoming events, and 6 high-probability Staff SDET technical questions with winning answers and strategic reverse-interview questions.
+- 🔒 **100% Private & Git-Safe:** All sessions (`.auth/`), databases (`applications.db`), trackers, and personal resumes/cover letters (`*.pdf`) are strictly excluded in `.gitignore`.
 
 ---
 
@@ -108,7 +110,66 @@ PROFILE=my_profile
 
 ---
 
-### Step 4: Configure Visual SQLite Viewer in Your IDE
+### Step 4: Environment Configuration & Automated Email Setup (`.env`)
+
+Job Hunter features an autonomous interview intelligence engine that analyzes company profiles and delivers comprehensive briefing dossiers and PDF prep packs directly to your inbox. All communication settings are strictly environment-driven with **zero hardcoding**.
+
+Copy the environment template to create your local `.env`:
+```bash
+cp .env.template .env
+```
+
+#### 1. Mapping Required Variables in `.env`
+Open `.env` in your editor and configure your variables:
+
+| Environment Variable | Description | Example / Default |
+| :--- | :--- | :--- |
+| `PROFILE` | The YAML profile name in `profiles/` (without `.yaml`) | `my_profile` |
+| `RECIPIENT_EMAIL` | Dedicated destination inbox where your dossiers and alerts arrive | `your_inbox@gmail.com` |
+| `SENDER_EMAIL` | Gmail / Google Workspace address used to dispatch the emails | `your_inbox@gmail.com` |
+| `EMAIL_APP_PASSWORD` | 16-character Google App Password (spaces optional) | `abcd efgh ijkl mnop` |
+| `SMTP_HOST` | *(Optional)* SMTP server host | `smtp.gmail.com` |
+| `SMTP_PORT` | *(Optional)* SMTP port (SSL) | `465` |
+| `RESUME_PATH` | *(Optional)* Default single-page CV filename in root folder | `my_resume.pdf` |
+
+---
+
+#### 2. How to Generate a Google App Password (Step-by-Step)
+For security, Gmail does not allow direct SMTP login with your standard Google password. You must generate a dedicated **16-character App Password**:
+
+1. **Open Google Account Settings:**  
+   Navigate to [https://myaccount.google.com/](https://myaccount.google.com/).
+2. **Ensure 2-Step Verification is Active:**  
+   - In the left sidebar, click **Security**.
+   - Under *"How you sign in to Google"*, verify that **2-Step Verification** is turned **ON**. *(Google mandates 2FA to create app-specific passwords)*.
+3. **Navigate to App Passwords:**  
+   - In the top search bar inside Google Account, search for **"App passwords"** and select it.  
+   - Alternatively, visit the direct URL: [https://myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
+4. **Create a Dedicated App Password:**  
+   - In the **App name** field, type a label such as `Job Hunter Engine` or `Interview Assistant`.
+   - Click **Create**.
+5. **Copy the 16-Character Password:**  
+   - Google will display a 16-character code (e.g., `abcd efgh ijkl mnop`).
+   - Copy this code immediately (it is only shown once).
+6. **Paste into `.env`:**  
+   ```env
+   RECIPIENT_EMAIL="your_destination@gmail.com"
+   SENDER_EMAIL="your_sender@gmail.com"
+   EMAIL_APP_PASSWORD="abcd efgh ijkl mnop"
+   ```
+
+---
+
+> [!CAUTION]
+> ### 🔒 Critical Security & Confidentiality Notice
+> - **NEVER share your Gmail App Password with ANYONE**: An App Password grants direct SMTP access to send emails from your Google account. Treat it with the same sensitivity as a root private key.
+> - **NEVER commit `.env` to Git**: Your `.env` contains personal credentials and must NEVER be pushed to GitHub or any public remote. The file is strictly enforced in [.gitignore](.gitignore).
+> - **Zero Hardcoding Guarantee**: The Job Hunter codebase contains **zero hardcoded email addresses or credentials**—all communication routing reads strictly from your local `.env`.
+> - **Never paste `.env` into public issues, screenshots, chat groups, or pull requests**.
+
+---
+
+### Step 5: Configure Visual SQLite Viewer in Your IDE
 
 The CRM uses `applications.db` to guarantee zero data loss. To view and filter your jobs visually inside your editor:
 
@@ -215,8 +276,25 @@ Once open in your AI IDE, you don't need to write manual scripts — just prompt
 ### 4. Recruiter Discovery & Cadence Follow-Ups
 > *"Check my application tracker. Are there any recruiter follow-ups due today? If so, find the hiring recruiter for that company on LinkedIn and draft a warm 300-character connection note."*
 
-### 5. Check Pipeline & Sync Health
+### 5. Keyword Gap Audit & Match Score
+> *"Run an audit on the job description for Kaseya (or any job URL). Contrast my profile against the requirements, give me my compatibility score, highlight missing keyword gaps, and generate interview talking points."*
+
+### 6. Single-Page Targeted Cover Letter Generation
+> *"Generate a tailored 3-paragraph executive cover letter for the Kaseya Staff SDET role emphasizing my Crossplane, Playwright MCP, and Kubernetes projects. Output it as a strict single-page PDF with zero overflow."*
+
+### 7. Automated Interview Prep & Company Dossier
+> *"Generate a complete interview prep dossier for Kaseya for the Staff SDET position. Fetch their engineering leadership, analyze their tech stack, provide 6 high-probability technical questions with winning answers tailored to my 10-year Staff SDET profile, and draft strategic reverse-interview questions to ask their VP/Director."*
+
+### 8. End-to-End Interview Intel & Email Dispatch (Native AI IDE Tool)
+> *"Run `send_interview_prep_email(company_name='TalAstra HR Consultants (AI Pod)')`. Analyze the exact job description and company profile as an interviewer for my experience level, generate comprehensive deep-dive questions with winning answers, format IDE code demonstrations, render a multi-page PDF, and deliver everything to my email."*
+
+### 9. Send Discovered Jobs & Daily Job Digest via Email
+> *"Search cross-platform jobs for Staff SDET in India/Remote. Take the top 5 highest-match positions, format them into an executive HTML job digest email with company details, salary, and direct apply links, and send it to my email."*
+
+### 10. Check Pipeline & Sync Health
 > *"Show me a summary of my active pipeline, breakdown by platform, and confirm that `applications.db` and `applications_tracker.json` are in sync."*
+
+
 
 ---
 

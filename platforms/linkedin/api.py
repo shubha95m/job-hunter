@@ -267,6 +267,15 @@ def get_job_details(job_id_or_url: str) -> Dict[str, Any]:
                 comp_name = inc.get("name", "")
                 break
 
+        if not comp_name and job.get("companyDetails", {}).get("company"):
+            comp_urn = job.get("companyDetails", {}).get("company", "").split(":")[-1]
+            try:
+                c_resp = client.get(f"https://www.linkedin.com/voyager/api/organization/companies/{comp_urn}")
+                if c_resp.status_code == 200:
+                    comp_name = c_resp.json().get("data", {}).get("name", "")
+            except Exception:
+                pass
+
         return {
             "job_id": job_id,
             "title": job.get("title", "Unknown"),
