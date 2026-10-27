@@ -636,6 +636,7 @@ async def generate_interview_dossier(
     job_location = ""
     recruiter_notes = ""
     recruiter_name = ""
+    recruiter_email = ""
     crm_row_id = ""
     job_url = ""
     job_key = ""
@@ -662,6 +663,8 @@ async def generate_interview_dossier(
             crm_row_id = str(row["id"]) if "id" in row.keys() else ""
             platform_source = row["platform"] or "LinkedIn"
             recruiter_name = row["recruiter_name"] or ""
+            if "recruiter_email" in row.keys():
+                recruiter_email = row["recruiter_email"] or ""
             if not target_role:
                 target_role = row["role_title"]
             recruiter_notes = row["notes"] or ""
@@ -1003,62 +1006,37 @@ async def generate_interview_dossier(
         }
     ]
 
-    # Dynamically match triggers against the JD full text
-    for t in dynamic_topics:
-        if any(trig in full_text for trig in t["triggers"]):
-            technical_questions.append({
-                "topic": t["topic"],
-                "question": t["question"],
-                "winning_talking_points": t["talking_points"]
-            })
+    # 3. Fully Dynamic Multi-Category Interview Battery Generation
+    # Generates 12-15 Verbal/Architectural questions, 10 Coding Challenges, 5 Managerial questions, and 3 Reverse questions
+    from runtime.interview_battery import build_interview_battery
+    battery = build_interview_battery(candidate, clean_comp, target_role, full_text)
 
-    # If few specific matches found, supplement with candidate's core strengths
-    if len(technical_questions) < 5:
-        primary_skills = candidate["skills"][:4]
-        technical_questions.extend([
-            {
-                "topic": f"High-Throughput Engineering Architecture with {primary_skills[0]}",
-                "question": f"At {clean_comp}, how do you structure an enterprise test harness using {primary_skills[0]} to ensure thread safety, parallel execution, and minimal CI execution time?",
-                "winning_talking_points": (
-                    f"Cite your {candidate['years_of_experience']} years building scalable frameworks in {primary_skills[0]}. "
-                    "Emphasize worker isolation, deterministic data seeding, and sub-10-minute CI gates."
-                )
-            },
-            {
-                "topic": "Shift-Left CI/CD & Automated Merge Gates",
-                "question": f"How do you implement progressive shift-left testing at {clean_comp} so that defects are discovered during developer branch commits rather than in staging?",
-                "winning_talking_points": (
-                    "Implement pre-commit hooks, containerized unit/integration PR checks, and automated contract validation before merge approval."
-                )
-            }
-        ])
+    verbal_questions = battery.get("verbal_questions", [])
+    coding_challenges = battery.get("coding_challenges", [])
+    managerial_questions = battery.get("managerial_questions", [])
+    reverse_questions = battery.get("reverse_questions", [])
 
-    # 4. Strategic Reverse-Interview Questions (To Ask Leadership / Hiring Manager)
-    reverse_questions = [
-        f"How does engineering leadership at {clean_comp} balance feature delivery velocity versus platform infrastructure health during intense release cycles?",
-        "What is the ownership model across feature squads—do engineers own their services end-to-end (code, testing, deployment, and on-call)?",
-        "What is currently the single largest bottleneck in your deployment pipeline: build/test runtime, environment divergence, or dependency coordination?",
-        f"Where is {clean_comp} currently prioritizing AI adoption across the software development lifecycle, and what opportunities exist to lead modernization?"
-    ]
+    technical_questions = verbal_questions
 
     # 4. Strategic Assessment & Planner Framework
     # Evaluates JD scope, identifies risk areas, and determines depth of technical scrutiny.
     planner_thinking = {
-        "evaluation_mode": f"Staff Architect Interview Panel ({clean_comp})",
+        "evaluation_mode": f"Senior / Staff Engineering Interview Panel ({clean_comp})",
         "candidate_calibrated_yoe": candidate["years_of_experience"],
         "analyzed_jd_tokens": len(full_text.split()),
         "detected_key_domains": [
-            d["topic"] for d in technical_questions[:5]
+            d["topic"] for d in verbal_questions[:5]
         ],
         "scrutiny_rationale": (
             f"Calibrated for candidate's {candidate['years_of_experience']} YOE and {clean_comp}'s requirements for {target_role}. "
-            f"Probes architectural governance, operational risk mitigation, and production resilience across {len(technical_questions)} distinct technical pillars."
+            f"Structured into 4 rigorous interview dimensions: {len(verbal_questions)} Conceptual/Architectural deep-dives, "
+            f"{len(coding_challenges)} concrete implementation coding challenges, {len(managerial_questions)} managerial/leadership scenarios, and {len(reverse_questions)} strategic reverse-interview inquiries."
         ),
         "preparation_pillars": [
-            "1. Brownfield & Supply Chain Risk: Testing legacy codebases & LLM-generated PR drift.",
-            "2. System Invariants & Data Integrity: State verification across databases & stored procedures.",
-            "3. High-Velocity Reliability: Flaky test quarantine SLAs, worker isolation, and CI sharding.",
-            "4. Stakeholder & Architectural Alignment: Dora metrics reporting and reverse-interview questions."
+            "1. Core Language & Memory Model: JVM execution, GC tuning, memory visibility & immutability.",
+            "2. Advanced Collections & Concurrency: HashMap treeify internals, ConcurrentHashMap CAS, lock striping, ThreadPoolExecutor.",
+            "3. Framework Internals & Persistence: Spring Bean lifecycle, @Transactional proxy bypass, Hibernate N+1 query elimination.",
+            "4. Distributed Architecture & Cloud: Saga vs 2PC, Redis distributed locks, transactional outbox, and zero-downtime K8s."
         ]
     }
 
@@ -1067,10 +1045,10 @@ async def generate_interview_dossier(
         "role_title": target_role,
         "location": job_location or "Pune / Bengaluru / Hyderabad (Hybrid)",
         "platform": platform_source,
-        "job_key": job_key or f"linkedin_{job_url.split('/')[-2]}" if "linkedin" in job_url else "Direct",
+        "job_key": job_key or (f"linkedin_{job_url.split('/')[-2]}" if "linkedin" in job_url else "Direct"),
         "job_url": job_url or "https://www.linkedin.com/jobs/view/4474301999/",
-        "recruiter_name": recruiter_name or "Shaily Dubey",
-        "recruiter_email": "shaily.dubey@talastra.in" if "talastra" in clean_comp.lower() else "",
+        "recruiter_name": recruiter_name or "Talent Acquisition Team",
+        "recruiter_email": recruiter_email or "",
         "crm_id": crm_row_id or "41",
         "notice_period": "Immediate to 30 Days",
         "notes": recruiter_notes
@@ -1096,7 +1074,10 @@ async def generate_interview_dossier(
             "core_tech_stack": kb_entry["tech_stack"]
         },
         "discovered_engineering_leadership": leadership_members,
-        "high_probability_technical_questions": technical_questions,
+        "high_probability_technical_questions": verbal_questions,
+        "verbal_questions": verbal_questions,
+        "coding_challenges": coding_challenges,
+        "managerial_questions": managerial_questions,
         "strategic_reverse_interview_questions": reverse_questions,
         "candidate_advantage_summary": (
             f"Equipped with {candidate['years_of_experience']} years of {candidate['primary_title']} experience, "
@@ -1117,19 +1098,85 @@ def format_dossier_html(dossier_data: Dict[str, Any]) -> str:
     role = dossier_data.get("role_title", candidate["primary_target_role"])
     info = dossier_data.get("company_intelligence", {})
     leadership = dossier_data.get("discovered_engineering_leadership", [])
-    questions = dossier_data.get("high_probability_technical_questions", [])
+    verbals = dossier_data.get("verbal_questions") or dossier_data.get("high_probability_technical_questions", [])
+    coding_challenges = dossier_data.get("coding_challenges", [])
+    managerial = dossier_data.get("managerial_questions", [])
     reverse_q = dossier_data.get("strategic_reverse_interview_questions", [])
 
+    import html as html_lib
+
     q_cards_html = []
-    for i, q in enumerate(questions, 1):
-        topic = q.get("topic", f"Technical Focus #{i}")
+    for i, q in enumerate(verbals, 1):
+        tier = q.get("tier", "Core Technical Focus")
+        topic = q.get("topic", f"Question #{i}")
         quest = q.get("question", "")
-        pts = q.get("winning_talking_points", "")
+        pts = q.get("talking_points") or q.get("winning_talking_points", "")
         q_cards_html.append(f"""
         <div class="q-block">
-          <div class="q-title">{i}. [{topic}]</div>
-          <div class="q-desc">{quest}</div>
-          <div class="q-answer"><b>Winning Strategy & Model Talking Points:</b><br>{pts}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+            <div class="q-title">{i}. [{topic}]</div>
+            <span style="background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px;">{tier}</span>
+          </div>
+          <div class="q-desc"><b>Question:</b> {quest}</div>
+          <div class="q-answer"><b>Winning Strategy & In-Depth Technical Talking Points:</b><br>{pts}</div>
+        </div>
+        """)
+
+    coding_cards_html = []
+    for c in coding_challenges:
+        cid = c.get("id", "")
+        title = c.get("title", "")
+        cat = c.get("category", "")
+        scenario = c.get("scenario", "")
+        fn = c.get("filename", "")
+        lang = c.get("language", "")
+        escaped_code = html_lib.escape(c.get("code", ""))
+        tc = c.get("time_complexity", "")
+        sc = c.get("space_complexity", "")
+        inv = c.get("invariants", "")
+
+        coding_cards_html.append(f"""
+        <div class="q-block" style="border-left: 4px solid #8b5cf6;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+            <div style="font-size: 15px; font-weight: 700; color: #5b21b6;">Challenge #{cid}: {title}</div>
+            <span style="background: #f3e8ff; color: #6b21a8; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px;">{cat}</span>
+          </div>
+          <div style="font-size: 13.5px; color: #334155; margin-bottom: 12px; line-height: 1.55;">
+            <b>Problem Scenario & Constraints:</b> {scenario}
+          </div>
+          <div class="code-editor">
+            <div class="code-header">
+              <div class="code-dots">
+                <span class="code-dot dot-red"></span>
+                <span class="code-dot dot-yellow"></span>
+                <span class="code-dot dot-green"></span>
+              </div>
+              <span>{fn}</span>
+              <span>{lang}</span>
+            </div>
+            <pre class="code-block">{escaped_code}</pre>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; font-size: 12.5px; color: #475569;">
+            <div><b>Time Complexity:</b> {tc} | <b>Space Complexity:</b> {sc}</div>
+            <div style="margin-top: 4px;"><b>Core Architectural Invariant:</b> {inv}</div>
+          </div>
+        </div>
+        """)
+
+    managerial_cards_html = []
+    for m in managerial:
+        mid = m.get("id", "")
+        scen = m.get("scenario", "")
+        quest = m.get("question", "")
+        star = m.get("star_answer", "").replace("\n", "<br>")
+        managerial_cards_html.append(f"""
+        <div class="q-block" style="border-left: 4px solid #10b981;">
+          <div style="font-size: 14.5px; font-weight: 700; color: #065f46; margin-bottom: 6px;">Scenario #{mid}: {scen}</div>
+          <div class="q-desc"><b>Question:</b> {quest}</div>
+          <div class="q-answer" style="border-left-color: #10b981; background: #f0fdf4;">
+            <b>Model STAR Leadership Response (Situation, Task, Action, Result):</b><br>
+            {star}
+          </div>
         </div>
         """)
 
@@ -1354,7 +1401,7 @@ def format_dossier_html(dossier_data: Dict[str, Any]) -> str:
   </div>
 
   <div class="callout-warning">
-    <b>The Real Hiring Mandate:</b> This is strictly <b>NOT a greenfield role</b>. The team is consulting for high-growth enterprises and regulated clients. Developers on those client teams are shipping code 3x faster using Copilots and LLMs, but QA suites are failing or nonexistent. They need an authoritative Staff SDET who can walk into a messy brownfield codebase, institute order, validate AI PRs, and establish automated test gates that prevent catastrophic regressions.
+    <b>The Real Hiring Mandate:</b> This is a mission-critical <b>{role}</b> position at <b>{comp}</b>. The engineering leadership is seeking an experienced senior specialist with {candidate['years_of_experience']} years of experience and deep mastery in {', '.join(candidate['skills'][:4])} who can architect high-throughput distributed systems, eliminate concurrency/transaction bottlenecks, and drive zero-downtime engineering velocity.
   </div>
 
   <!-- SECTION 2: STRATEGIC EVALUATION & PLANNER BLUEPRINT -->
@@ -1362,8 +1409,8 @@ def format_dossier_html(dossier_data: Dict[str, Any]) -> str:
   <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px; margin-bottom: 24px;">
     <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
       <span style="background: #1e293b; color: #f8fafc; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Assessment Level: Active</span>
-      <span style="background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Candidate Calibrated: {candidate['years_of_experience']} YOE Staff Level</span>
-      <span style="background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Dynamic Technical Pillars: {len(questions)}</span>
+      <span style="background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Candidate Calibrated: {candidate['years_of_experience']} YOE Senior / Lead</span>
+      <span style="background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Dynamic Technical Pillars: {len(verbals)}</span>
     </div>
     <div style="font-size: 13.5px; color: #334155; line-height: 1.6; margin-bottom: 14px;">
       <b>Scrutiny Rationale:</b><br>
@@ -1381,96 +1428,29 @@ def format_dossier_html(dossier_data: Dict[str, Any]) -> str:
     {lead_html}
   </ul>
 
-  <!-- SECTION 4: HIGH-PROBABILITY TECHNICAL QUESTIONS -->
-  <h2>4. High-Probability Technical Interview Questions & Staff SDET Answers</h2>
+  <!-- SECTION 4: IN-DEPTH VERBAL & CONCEPTUAL BATTERY -->
+  <h2>4. High-Probability Conceptual & Architectural Questions ({len(verbals)} Questions)</h2>
+  <div class="callout-strategy">
+    <b>Technical Breadth & Depth:</b> Spans Core Language & Memory Model, Advanced Collections & Concurrency Internals, Framework Deep-Dive, and Distributed Cloud Architecture.
+  </div>
   {''.join(q_cards_html)}
 
-  <!-- SECTION 5: PRODUCTION ARCHITECTURE & CODE STANDARDS -->
-  <h2>5. Production Architecture & Code Standards</h2>
-
-  <h3>A. Thread-Safe Selenium Java Driver Factory</h3>
-  <div class="code-editor">
-    <div class="code-header">
-      <div class="code-dots">
-        <span class="code-dot dot-red"></span>
-        <span class="code-dot dot-yellow"></span>
-        <span class="code-dot dot-green"></span>
-      </div>
-      <span>src/main/java/core/driver/DriverFactory.java</span>
-      <span>Java 17 • ThreadLocal</span>
-    </div>
-    <pre class="code-block"><span class="kw">package</span> com.enterprise.driver;
-
-<span class="kw">import</span> org.openqa.selenium.WebDriver;
-<span class="kw">import</span> org.openqa.selenium.chrome.ChromeDriver;
-<span class="kw">import</span> org.openqa.selenium.chrome.ChromeOptions;
-<span class="kw">import</span> org.openqa.selenium.firefox.FirefoxDriver;
-<span class="kw">import</span> java.time.Duration;
-
-<span class="kw">public class</span> <span class="type">DriverFactory</span> {{
-    <span class="cm">// ThreadLocal ensures parallel worker threads maintain isolated browser sessions</span>
-    <span class="kw">private static final</span> <span class="type">ThreadLocal</span>&lt;<span class="type">WebDriver</span>&gt; driverThreadLocal = <span class="kw">new</span> <span class="type">ThreadLocal</span>&lt;&gt;();
-
-    <span class="kw">public static</span> <span class="type">WebDriver</span> <span class="fn">getDriver</span>() {{
-        <span class="kw">return</span> driverThreadLocal.<span class="fn">get</span>();
-    }}
-
-    <span class="kw">public static void</span> <span class="fn">initDriver</span>(<span class="type">String</span> browser) {{
-        <span class="type">WebDriver</span> driver;
-        <span class="kw">if</span> (browser.<span class="fn">equalsIgnoreCase</span>(<span class="str">"chrome"</span>)) {{
-            <span class="type">ChromeOptions</span> options = <span class="kw">new</span> <span class="type">ChromeOptions</span>();
-            options.<span class="fn">addArguments</span>(<span class="str">"--headless=new"</span>, <span class="str">"--disable-gpu"</span>, <span class="str">"--no-sandbox"</span>);
-            driver = <span class="kw">new</span> <span class="type">ChromeDriver</span>(options);
-        }} <span class="kw">else</span> {{
-            driver = <span class="kw">new</span> <span class="type">FirefoxDriver</span>();
-        }}
-        driver.<span class="fn">manage</span>().<span class="fn">timeouts</span>().<span class="fn">implicitlyWait</span>(<span class="type">Duration</span>.ZERO);
-        driverThreadLocal.<span class="fn">set</span>(driver);
-    }}
-
-    <span class="kw">public static void</span> <span class="fn">quitDriver</span>() {{
-        <span class="kw">if</span> (driverThreadLocal.<span class="fn">get</span>() != <span class="kw">null</span>) {{
-            driverThreadLocal.<span class="fn">get</span>().<span class="fn">quit</span>();
-            driverThreadLocal.<span class="fn">remove</span>();
-        }}
-    }}
-}}</pre>
+  <!-- SECTION 5: CONCRETE PRACTICAL CODING CHALLENGES -->
+  <h2>5. Concrete Production Coding Challenges ({len(coding_challenges)} Live Coding Scenarios)</h2>
+  <div class="callout-strategy">
+    <b>Production Code Invariants:</b> Real-world enterprise challenges implemented with thread safety, lock ordering, error handling, and complexity bounds.
   </div>
+  {''.join(coding_cards_html)}
 
-  <h3>B. Deterministic Playwright Network Mocking & Auto-Waiting</h3>
-  <div class="code-editor">
-    <div class="code-header">
-      <div class="code-dots">
-        <span class="code-dot dot-red"></span>
-        <span class="code-dot dot-yellow"></span>
-        <span class="code-dot dot-green"></span>
-      </div>
-      <span>tests/e2e/validations/summary.spec.ts</span>
-      <span>TypeScript • Playwright</span>
-    </div>
-    <pre class="code-block"><span class="kw">import</span> {{ test, expect }} <span class="kw">from</span> <span class="str">'@playwright/test'</span>;
-
-test(<span class="str">'verify validation summary card with deterministic backend stub'</span>, <span class="kw">async</span> ({{ page }}) =&gt; {{
-    <span class="kw">await</span> page.<span class="fn">route</span>(<span class="str">'**/api/v1/validations/summary'</span>, <span class="kw">async</span> route =&gt; {{
-        <span class="kw">await</span> route.<span class="fn">fulfill</span>({{
-            status: <span class="num">200</span>,
-            contentType: <span class="str">'application/json'</span>,
-            body: JSON.<span class="fn">stringify</span>({{
-                status: <span class="str">'PASSED'</span>,
-                flakyTestsQuarantined: <span class="num">0</span>,
-                aiCodeChecked: <span class="kw">true</span>
-            }})
-        }});
-    }});
-
-    <span class="kw">await</span> page.<span class="fn">goto</span>(<span class="str">'/dashboard'</span>);
-    <span class="kw">const</span> summaryCard = page.<span class="fn">locator</span>(<span class="str">'[data-testid="validation-summary"]'</span>);
-    <span class="kw">await</span> expect(summaryCard).<span class="fn">toBeVisible</span>();
-    <span class="kw">await</span> expect(summaryCard).<span class="fn">toContainText</span>(<span class="str">'AI Code Checked'</span>);
-}});</pre>
+  <!-- SECTION 6: MANAGERIAL & CROSS-FUNCTIONAL LEADERSHIP -->
+  <h2>6. Managerial, Behavioral & Cross-Functional Alignment ({len(managerial)} Scenarios)</h2>
+  <div class="callout-strategy">
+    <b>Leadership Competencies:</b> Evaluates decision making under production outages, technical debt trade-offs, mentoring bars, and cross-squad alignment.
   </div>
+  {''.join(managerial_cards_html)}
 
-  <h2>6. Strategic Reverse-Interview Questions (To Ask Leadership)</h2>
+  <!-- SECTION 7: STRATEGIC REVERSE-INTERVIEW QUESTIONS -->
+  <h2>7. Strategic Reverse-Interview Questions (To Ask Leadership)</h2>
   <div class="callout-strategy">
     <b>Senior Impact:</b> Asking architectural questions shifts the dynamic to a high-level peer alignment session.
   </div>

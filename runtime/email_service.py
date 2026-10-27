@@ -154,11 +154,11 @@ def send_email(
     try:
         if smtp_port == 465:
             context = ssl.create_default_context()
-            with smtplib.SMTP_SSL(smtp_host, smtp_port, context=context) as server:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, context=context, timeout=30) as server:
                 server.login(sender, app_password)
                 server.sendmail(sender, [target_to], msg.as_string())
         else:
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
                 server.ehlo()
                 context = ssl.create_default_context()
                 server.starttls(context=context)

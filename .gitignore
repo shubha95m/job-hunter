@@ -49,11 +49,12 @@ Targeted_Cover_Letter_*
 cover_letter*
 *Dossier*
 *dossier*
-*Interview*
-*interview*
-*Prep*
-*prep*
+*Interview*.txt
+*interview*.txt
+*Prep*.txt
+*prep*.txt
 *_job_summary*
+!runtime/interview_battery.py
 Shubham_Sharma_Staff_SDET.pdf
 Shubham_Sharma_Staff_SDET_under1mb.pdf
 Shubham_Sharma_Single_Page_CV.pdf
