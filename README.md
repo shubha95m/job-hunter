@@ -288,7 +288,10 @@ Once open in your AI IDE, you don't need to write manual scripts — just prompt
 ### 8. End-to-End Interview Intel & Email Dispatch (Native AI IDE Tool)
 > *"Run `send_interview_prep_email(company_name='TalAstra HR Consultants (AI Pod)')`. Analyze the exact job description and company profile as an interviewer for my experience level, generate comprehensive deep-dive questions with winning answers, format IDE code demonstrations, render a multi-page PDF, and deliver everything to my email."*
 
-### 9. Check Pipeline & Sync Health
+### 9. Send Discovered Jobs & Daily Job Digest via Email
+> *"Search cross-platform jobs for Staff SDET in India/Remote. Take the top 5 highest-match positions, format them into an executive HTML job digest email with company details, salary, and direct apply links, and send it to my email."*
+
+### 10. Check Pipeline & Sync Health
 > *"Show me a summary of my active pipeline, breakdown by platform, and confirm that `applications.db` and `applications_tracker.json` are in sync."*
 
 
