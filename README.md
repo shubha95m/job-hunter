@@ -110,7 +110,66 @@ PROFILE=my_profile
 
 ---
 
-### Step 4: Configure Visual SQLite Viewer in Your IDE
+### Step 4: Environment Configuration & Automated Email Setup (`.env`)
+
+Job Hunter features an autonomous interview intelligence engine that analyzes company profiles and delivers comprehensive briefing dossiers and PDF prep packs directly to your inbox. All communication settings are strictly environment-driven with **zero hardcoding**.
+
+Copy the environment template to create your local `.env`:
+```bash
+cp .env.template .env
+```
+
+#### 1. Mapping Required Variables in `.env`
+Open `.env` in your editor and configure your variables:
+
+| Environment Variable | Description | Example / Default |
+| :--- | :--- | :--- |
+| `PROFILE` | The YAML profile name in `profiles/` (without `.yaml`) | `my_profile` |
+| `RECIPIENT_EMAIL` | Dedicated destination inbox where your dossiers and alerts arrive | `your_inbox@gmail.com` |
+| `SENDER_EMAIL` | Gmail / Google Workspace address used to dispatch the emails | `your_inbox@gmail.com` |
+| `EMAIL_APP_PASSWORD` | 16-character Google App Password (spaces optional) | `abcd efgh ijkl mnop` |
+| `SMTP_HOST` | *(Optional)* SMTP server host | `smtp.gmail.com` |
+| `SMTP_PORT` | *(Optional)* SMTP port (SSL) | `465` |
+| `RESUME_PATH` | *(Optional)* Default single-page CV filename in root folder | `my_resume.pdf` |
+
+---
+
+#### 2. How to Generate a Google App Password (Step-by-Step)
+For security, Gmail does not allow direct SMTP login with your standard Google password. You must generate a dedicated **16-character App Password**:
+
+1. **Open Google Account Settings:**  
+   Navigate to [https://myaccount.google.com/](https://myaccount.google.com/).
+2. **Ensure 2-Step Verification is Active:**  
+   - In the left sidebar, click **Security**.
+   - Under *"How you sign in to Google"*, verify that **2-Step Verification** is turned **ON**. *(Google mandates 2FA to create app-specific passwords)*.
+3. **Navigate to App Passwords:**  
+   - In the top search bar inside Google Account, search for **"App passwords"** and select it.  
+   - Alternatively, visit the direct URL: [https://myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
+4. **Create a Dedicated App Password:**  
+   - In the **App name** field, type a label such as `Job Hunter Engine` or `Interview Assistant`.
+   - Click **Create**.
+5. **Copy the 16-Character Password:**  
+   - Google will display a 16-character code (e.g., `abcd efgh ijkl mnop`).
+   - Copy this code immediately (it is only shown once).
+6. **Paste into `.env`:**  
+   ```env
+   RECIPIENT_EMAIL="your_destination@gmail.com"
+   SENDER_EMAIL="your_sender@gmail.com"
+   EMAIL_APP_PASSWORD="abcd efgh ijkl mnop"
+   ```
+
+---
+
+> [!CAUTION]
+> ### 🔒 Critical Security & Confidentiality Notice
+> - **NEVER share your Gmail App Password with ANYONE**: An App Password grants direct SMTP access to send emails from your Google account. Treat it with the same sensitivity as a root private key.
+> - **NEVER commit `.env` to Git**: Your `.env` contains personal credentials and must NEVER be pushed to GitHub or any public remote. The file is strictly enforced in [.gitignore](.gitignore).
+> - **Zero Hardcoding Guarantee**: The Job Hunter codebase contains **zero hardcoded email addresses or credentials**—all communication routing reads strictly from your local `.env`.
+> - **Never paste `.env` into public issues, screenshots, chat groups, or pull requests**.
+
+---
+
+### Step 5: Configure Visual SQLite Viewer in Your IDE
 
 The CRM uses `applications.db` to guarantee zero data loss. To view and filter your jobs visually inside your editor:
 
