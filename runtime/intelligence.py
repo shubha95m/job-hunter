@@ -750,6 +750,32 @@ async def generate_interview_dossier(
             "recent_events": "Forming dedicated AI Pods for high-velocity software engineering clients and enterprise GCCs.",
             "upcoming_events": "Scaling Pune and Bengaluru hybrid automation delivery pods for automated validation of LLM-generated code.",
             "tech_stack": "Playwright, Selenium Java, Selenide, JUnit, REST Assured, CI/CD Quality Gates, SQL Stored Procedures, AI Assistants."
+        },
+        "hsbc": {
+            "type": "Global Banking & Financial Services Leader (Wealth & Personal Banking Tech Centre)",
+            "headquarters": "London, UK / Pune Tech Centre (Kalyani Nagar / Kharadi, India)",
+            "founded": "1865",
+            "founders": "Thomas Sutherland",
+            "ceo": "Georges Elhedery",
+            "cto": "Stuart Riley (Global CIO for WPB / Technology)",
+            "stage": "Public (LSE: HSBA / NYSE: HSBC) | Total Assets: ~$3 Trillion+",
+            "ratings": "4.1/5 (Glassdoor) | Tier-1 Global Banking Scale, High Autonomy, Top Benefits",
+            "recent_events": "Investing $2B+ in cloud modernization and real-time transaction processing for Wealth & Personal Banking (WPB); migrating legacy core banking ledgers to cloud microservices.",
+            "upcoming_events": "Rollout of AI-powered global wealth management advisory services and ISO 20022 real-time settlement rails.",
+            "tech_stack": "Java 17, Spring Boot, Microservices, Apache Kafka, Redis, Oracle DB, PostgreSQL, Kubernetes, Cloud (AWS/GCP), Resilience4j, JUnit 5/Mockito."
+        },
+        "teksystems": {
+            "type": "Global Technology & Digital Services Firm (Dedicated Enterprise Delivery Pod for HSBC)",
+            "headquarters": "Hanover, Maryland, US / Pune Centre (Kalyani Nagar, India)",
+            "founded": "1983",
+            "founders": "Allegis Group Leadership",
+            "ceo": "Jay Alvather",
+            "cto": "Global Practice Leadership / Enterprise BFSI Pod Lead",
+            "stage": "Global Enterprise Services & Solutions (Allegis Group | $15B+ Revenue)",
+            "ratings": "4.1/5 (Glassdoor) | Premier Banking Delivery Partner for HSBC Global Tech",
+            "recent_events": "Selected by HSBC to lead critical wealth management and transactional core banking modernizations in Pune.",
+            "upcoming_events": "Expanding hybrid engineering pods in Kalyani Nagar Pune for high-concurrency microservices and financial gateway integrations.",
+            "tech_stack": "Java 17/11, Spring Boot, Spring Data JPA, Microservices, Redis Caching, Kubernetes, Concurrency & Transaction Management (@Transactional), Resilience4j."
         }
     }
 
@@ -910,6 +936,69 @@ async def generate_interview_dossier(
             "talking_points": (
                 "Track 4 primary Dora/Quality metrics: (1) Mean Time to Detect (MTTD) on PR gates, (2) Defect Escape Rate (DER) to production, "
                 "(3) Flaky Test Ratio (<0.5%), and (4) Cycle Time reduction (from days to minutes). Present executive dashboards highlighting release confidence."
+            )
+        },
+        {
+            "triggers": ["banking", "hsbc", "transaction", "wealth", "fintech", "payment", "ledger", "concurrency"],
+            "topic": "High-Concurrency Transaction Management & Distributed Consistency (Saga vs 2PC)",
+            "question": f"In core banking and wealth management systems at {clean_comp}, how do you manage high-concurrency transactions across distributed microservices without risking double-spends, phantom reads, or uncommitted ledger states?",
+            "talking_points": (
+                "Contrast 2-Phase Commit (blocking, low throughput) with the Saga Pattern (orchestrated vs choreographed) using transactional outbox and event sourcing. "
+                "Explain pessimistic row locking (`SELECT ... FOR UPDATE`) vs optimistic locking (`@Version`) in high-contention balance updates and idempotency keys to eliminate duplicate debits."
+            )
+        },
+        {
+            "triggers": ["redis", "caching", "cache", "stampede", "in-memory"],
+            "topic": "Low-Latency Redis Caching Strategies & Distributed Locking (Redlock)",
+            "question": "How do you design a multi-tier caching architecture in Spring Boot with Redis for high-frequency client portfolio queries, and how do you guard against cache penetration, cache stampede, and race conditions?",
+            "talking_points": (
+                "Implement Cache-Aside with probabilistic early expiration (XFetch) or mutex locks to eliminate stampedes. "
+                "Use Redis distributed locks (Redisson / atomic `SETNX` with TTL) for cross-pod synchronization and multi-region replication invalidations."
+            )
+        },
+        {
+            "triggers": ["spring", "spring boot", "jpa", "hibernate", "backend", "java"],
+            "topic": "Spring Boot Microservices Optimization & Hibernate Persistence Performance",
+            "question": "What are the most critical performance pitfalls in Spring Data JPA / Hibernate when scaling microservices, and how do you resolve N+1 query cascades, session bloat, and transactional boundary leaks?",
+            "talking_points": (
+                "Use `JOIN FETCH` and `@EntityGraph` to eliminate N+1 select queries. Restrict `@Transactional` to the service boundary with strict propagation (`REQUIRED` vs `REQUIRES_NEW`), "
+                "and leverage read-only transactions (`@Transactional(readOnly = true)`) to bypass Hibernate dirty-checking overhead in read workflows."
+            )
+        },
+        {
+            "triggers": ["gateway", "resilience4j", "circuit breaker", "fault tolerance", "resilience"],
+            "topic": "Financial Gateway Resilience & Circuit Breaker Architecture",
+            "question": "When integrating with external financial gateways and internal banking services that experience intermittent latency spikes or downtime, how do you architect fault tolerance to guarantee system availability?",
+            "talking_points": (
+                "Configure Resilience4j circuit breakers with custom sliding window failure rate thresholds, thread-pool bulkheads to isolate noisy neighbor dependencies, "
+                "exponential backoff retries with jitter, and deterministic fallback responses to protect core banking SLAs."
+            )
+        },
+        {
+            "triggers": ["kafka", "event-driven", "messaging", "outbox", "event"],
+            "topic": "Event-Driven Ledger Synchronization & Transactional Outbox Pattern",
+            "question": "How do you ensure guaranteed message delivery to Kafka without distributed two-phase commits when a microservice writes to a local database and emits a business event?",
+            "talking_points": (
+                "Implement the Transactional Outbox pattern: persist business entities and outbox event records in the exact same atomic DB transaction. "
+                "Use Debezium CDC or an asynchronous poller with consumer deduplication keys to achieve exactly-once processing semantics."
+            )
+        },
+        {
+            "triggers": ["api", "security", "oauth", "jwt", "idempotency", "rest"],
+            "topic": "Financial REST API Security & Idempotent Endpoint Design",
+            "question": "How do you secure banking REST APIs against replay attacks, payload tampering, and unintended duplicate submissions during network retries?",
+            "talking_points": (
+                "Enforce mutual TLS (mTLS) for service-to-service communication, OAuth2 / JWT validation with short-lived tokens, and strict `Idempotency-Key` headers "
+                "stored in Redis with atomic check-and-set semantics to guarantee idempotent execution."
+            )
+        },
+        {
+            "triggers": ["kubernetes", "docker", "cloud", "azure", "ingress", "k8s"],
+            "topic": "Zero-Downtime Microservice Orchestration & Graceful Termination on Kubernetes",
+            "question": "How do you configure Kubernetes deployments and Ingress routing for financial microservices to guarantee zero-downtime rolling updates and graceful termination of in-flight banking transactions?",
+            "talking_points": (
+                "Configure `preStop` lifecycle hooks with sleep buffer to drain in-flight transactions, tune readiness probes to stop ingress routing before shutdown, "
+                "configure rolling update `maxSurge`/`maxUnavailable`, and set pod disruption budgets (PDB)."
             )
         }
     ]
