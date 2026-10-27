@@ -11,8 +11,10 @@ An autonomous, multi-platform job application engine, personal CRM, and Model Co
 - ⭐ **Opportunity Wishlist & Package Tracking:** Search high-paying roles (e.g., > ₹1 Crore / $120k+ USD), bookmark them in a Wishlist with salary notes, and apply when ready.
 - 🔄 **Auto-Purge on Apply:** When you apply to a wishlisted job, it is automatically removed from the Wishlist, moved to active Applications, and inherits its package/notes.
 - 🤝 **Recruiter Touchpoint Cadence Engine:** Day 0 (Applied) ➔ Day 2 (Warm Recruiter Connection) ➔ Day 7 (Follow-up DM) with a 24-hour company deduplication guard.
-- 📄 **Single-Page Dynamic CV Rendering:** Automatically fetches and compiles your web resume/portfolio into an ATS-compliant, single-page PDF (< 200 KB) and attaches it on the fly.
-- 🔒 **100% Private & Git-Safe:** All sessions (`.auth/`), databases (`applications.db`), trackers, and personal resumes (`*.pdf`) are strictly excluded in `.gitignore`.
+- 🎯 **Keyword Gap Audit & Compatibility Scorer:** Tool `audit_job_compatibility` contrasts your profile against any job description, scores compatibility, reveals missing keyword gaps, and crafts interview talking points.
+- 📝 **Strict Single-Page Targeted Cover Letter:** Tool `generate_targeted_cover_letter` drafts tailored 3-paragraph executive pitches (Crossplane, Playwright MCP, Kubernetes test runners) and renders crisp, strictly 1-page A4 PDFs with zero truncation.
+- 🏢 **Automated Interview Prep & Company Dossier:** Tool `generate_interview_dossier` compiles Product vs Service intel, funding/valuation, leadership, recent/upcoming events, and 6 high-probability Staff SDET technical questions with winning answers and strategic reverse-interview questions.
+- 🔒 **100% Private & Git-Safe:** All sessions (`.auth/`), databases (`applications.db`), trackers, and personal resumes/cover letters (`*.pdf`) are strictly excluded in `.gitignore`.
 
 ---
 
@@ -215,8 +217,22 @@ Once open in your AI IDE, you don't need to write manual scripts — just prompt
 ### 4. Recruiter Discovery & Cadence Follow-Ups
 > *"Check my application tracker. Are there any recruiter follow-ups due today? If so, find the hiring recruiter for that company on LinkedIn and draft a warm 300-character connection note."*
 
-### 5. Check Pipeline & Sync Health
+### 5. Keyword Gap Audit & Match Score
+> *"Run an audit on the job description for Kaseya (or any job URL). Contrast my profile against the requirements, give me my compatibility score, highlight missing keyword gaps, and generate interview talking points."*
+
+### 6. Single-Page Targeted Cover Letter Generation
+> *"Generate a tailored 3-paragraph executive cover letter for the Kaseya Staff SDET role emphasizing my Crossplane, Playwright MCP, and Kubernetes projects. Output it as a strict single-page PDF with zero overflow."*
+
+### 7. Automated Interview Prep & Company Dossier
+> *"Generate a complete interview prep dossier for Kaseya for the Staff SDET position. Fetch their engineering leadership, analyze their tech stack, provide 6 high-probability technical questions with winning answers tailored to my 10-year Staff SDET profile, and draft strategic reverse-interview questions to ask their VP/Director."*
+
+### 8. End-to-End Interview Intel & Email Dispatch (Native AI IDE Tool)
+> *"Run `send_interview_prep_email(company_name='TalAstra HR Consultants (AI Pod)')`. Analyze the exact job description and company profile as an interviewer for my experience level, generate comprehensive deep-dive questions with winning answers, format IDE code demonstrations, render a multi-page PDF, and deliver everything to my email."*
+
+### 9. Check Pipeline & Sync Health
 > *"Show me a summary of my active pipeline, breakdown by platform, and confirm that `applications.db` and `applications_tracker.json` are in sync."*
+
+
 
 ---
 

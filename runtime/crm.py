@@ -384,6 +384,21 @@ def log_touchpoint(
     export_to_json()
     return {"status": "SUCCESS", "log_id": log_id, "company": company, "recruiter": recruiter_name, "action": action_type}
 
+def _get_cadence_candidate_summary() -> Tuple[int, str, str]:
+    """Dynamically retrieve candidate experience years, title, and key skills from active profile."""
+    try:
+        from main import load_profile
+        prof = load_profile()
+        prof_info = prof.get("professional_info", {})
+        yoe = int(round(float(prof_info.get("years_of_experience", 5))))
+        headline = prof_info.get("headline", "Engineering Professional")
+        title = headline.split("|")[0].strip() or "Engineering"
+        skills = prof.get("skills", [])
+        top_skills = ", ".join(skills[:3]) if skills else "System Architecture, Cloud"
+        return yoe, title, top_skills
+    except Exception:
+        return 5, "Engineering", "Software Architecture, Cloud"
+
 
 def get_pending_cadence_actions() -> List[Dict[str, Any]]:
     """
@@ -426,6 +441,7 @@ def get_pending_cadence_actions() -> List[Dict[str, Any]]:
 
         # Cadence Step 1: Day 2+ (48h after applying) -> Send warm Connection Request
         if days_elapsed >= 2 and stage == 0:
+            yoe_dyn, title_dyn, skills_dyn = _get_cadence_candidate_summary()
             actions.append({
                 "application_id": app["id"],
                 "company": comp,
@@ -442,12 +458,13 @@ def get_pending_cadence_actions() -> List[Dict[str, Any]]:
                 "guard_status": guard_msg,
                 "proposed_note_300chars": (
                     f"Hi {app['recruiter_name'].split()[0] if app['recruiter_name'] else 'there'}, I applied for the {role} role at {comp}. "
-                    f"With ~10 yrs architecting QA & SDET automation (Playwright, Java/Python, Cloud, AI testing), I'd love to connect and explore how I can support your goals!"
+                    f"With ~{yoe_dyn} yrs in {title_dyn} ({skills_dyn}), I'd love to connect and explore how I can support your goals!"
                 )[:295]
             })
 
         # Cadence Step 2: Day 7+ -> Follow-up DM if connected
         elif days_elapsed >= 7 and stage == 1:
+            yoe_dyn, title_dyn, skills_dyn = _get_cadence_candidate_summary()
             actions.append({
                 "application_id": app["id"],
                 "company": comp,
@@ -465,7 +482,7 @@ def get_pending_cadence_actions() -> List[Dict[str, Any]]:
                 "proposed_dm": (
                     f"Hi {app['recruiter_name'].split()[0] if app['recruiter_name'] else ''}, hope you're having a great week! "
                     f"Following up on my application for the {role} role ({app['job_url']}). I'm very excited about {comp}'s mission "
-                    f"and would welcome the opportunity to discuss how my Staff SDET background can drive test velocity for your team."
+                    f"and would welcome the opportunity to discuss how my {title_dyn} background can drive impact for your team."
                 )
             })
 
@@ -842,12 +859,13 @@ async def execute_cadence_action(
         rec_target = resolved_recruiter_url or resolved_recruiter_name
 
     # Determine Cadence Step
+    yoe_dyn, title_dyn, skills_dyn = _get_cadence_candidate_summary()
     if stage == 0:
         # Touchpoint 1: Warm Connection Request
         rec_first_name = resolved_recruiter_name.split()[0] if resolved_recruiter_name else "there"
         custom_note = (
             f"Hi {rec_first_name}, I applied for the {role} role at {comp}. "
-            f"With ~10 yrs architecting QA & SDET automation (Playwright, Java/Python, Cloud, AI testing), "
+            f"With ~{yoe_dyn} yrs in {title_dyn} ({skills_dyn}), "
             f"I'd love to connect and explore how I can support your goals!"
         )[:295]
 
@@ -898,7 +916,7 @@ async def execute_cadence_action(
         dm_text = (
             f"Hi {rec_first_name}, hope you're having a great week! "
             f"Following up on my application for the {role} role ({app['job_url']}). I'm very excited about {comp}'s mission "
-            f"and would welcome the opportunity to discuss how my Staff SDET background can drive test velocity for your team."
+            f"and would welcome the opportunity to discuss how my {title_dyn} background can drive impact for your team."
         )
 
         res = await linkedin_dom.send_dm(recipient=rec_target, message=dm_text)

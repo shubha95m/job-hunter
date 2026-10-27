@@ -26,10 +26,12 @@ from mcp_engine.safety import check_safety_guard
 from runtime.session_store import get_state_file
 from runtime.browser_pool import browser_pool
 from runtime import crm
+from runtime import intelligence
 from platforms.linkedin import api as linkedin_api
 from platforms.linkedin import dom as linkedin_dom
 from platforms.naukri.api import NaukriAPIClient
 from platforms.naukri import quick_apply as naukri_quick_apply
+from runtime import email_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATE_FILE = get_state_file("linkedin")
@@ -1246,12 +1248,13 @@ def draft_recruiter_pitch(
 ) -> str:
     """
     [READ-ONLY] Generate a tailored, executive outbound message for a recruiter citing a specific job URL and platform.
-    Can be used directly with send_dm or connect_with_person upon user confirmation.
+    Dynamically tailored to the active candidate profile and target job.
     """
+    cand = intelligence.get_candidate_context()
     rec_greeting = f"Hi {recruiter_name}" if recruiter_name else "Hello"
     short_note = (
         f"{rec_greeting}, I came across the {job_title} opening at {company} ([Platform: {platform}]: {job_url}). "
-        f"With ~10 yrs leading QA/SDET ecosystems (Playwright, Java/Python, Cloud, AI testing), I'd love to connect and explore synergy!"
+        f"With ~{int(round(float(cand['years_of_experience'])))} yrs in {cand['primary_title']} ({', '.join(cand['skills'][:3])}), I'd love to connect and explore synergy!"
     )
 
     full_dm = f"""{rec_greeting},
@@ -1260,13 +1263,13 @@ I hope you're having a productive week!
 
 I noticed that {company} is actively hiring for a {job_title} ([Platform: {platform}]: {job_url}).
 
-Given my background as a Staff SDET / QA Lead with nearly a decade of experience spearheading automated test ecosystems across complex microservices (Playwright, Python, Java/Kotlin, AWS/GCP, and AI-assisted QA), I believe my experience strongly aligns with your team's quality and release velocity goals.
+Given my background as a {cand['primary_title']} with {cand['years_of_experience']} years of experience engineering scalable systems across {', '.join(cand['skills'][:4])}, I believe my background strongly aligns with your team's technical and delivery goals.
 
-I'd welcome the opportunity to share my resume and discuss how my expertise can drive impact for {company}.
+I'd welcome the opportunity to discuss how my expertise can drive impact for {company}.
 
 Best regards,
-[Candidate Name]
-Portfolio: [Portfolio Link]"""
+{cand['full_name']}
+Portfolio: {cand['portfolio_url'] or cand['linkedin_url']}"""
 
     return json.dumps({
         "company": company,
@@ -1278,3 +1281,126 @@ Portfolio: [Portfolio Link]"""
     }, indent=2)
 
 
+# ==============================================================================
+# 20. Intelligence, Cover Letter Customization & Interview Prep Tools
+# ==============================================================================
+
+@mcp.tool()
+def audit_job_compatibility(
+    job_id_or_url: str,
+    role_title: Optional[str] = None
+) -> str:
+    """[READ-ONLY] Contrast candidate profile against job description. Highlights match percentage, core matching competencies, project synergies, missing keyword gaps, and interview talking points."""
+    try:
+        res = intelligence.audit_job_compatibility(job_id_or_url, role_title=role_title)
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error auditing job compatibility: {str(e)}"
+
+
+@mcp.tool()
+def generate_targeted_cover_letter(
+    job_id_or_url: str,
+    role_title: Optional[str] = None,
+    output_format: str = "text"
+) -> str:
+    """[READ-ONLY] Generate a tailored 3-paragraph executive cover letter pitch emphasizing matching projects from candidate history. When output_format='pdf', strictly guarantees a 1-page PDF layout without overflow or truncation."""
+    try:
+        res = intelligence.generate_targeted_cover_letter(job_id_or_url, role_title=role_title, output_format=output_format)
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error generating targeted cover letter: {str(e)}"
+
+
+@mcp.tool()
+def generate_interview_dossier(
+    company_name: str,
+    role_title: Optional[str] = None
+) -> str:
+    """[READ-ONLY] Automated Interview Prep & Company Dossier: Product vs Service classification, funding/stage/valuation, ratings, recent/upcoming events, engineering leadership discovery, tech stack analysis, high-probability technical questions tailored to target role and candidate background with winning answers, and strategic reverse-interview questions."""
+    try:
+        res = asyncio.run(intelligence.generate_interview_dossier(company_name, role_title=role_title))
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error generating interview dossier: {str(e)}"
+@mcp.tool()
+def send_email_notification(
+    subject: str,
+    body: str,
+    to_email: Optional[str] = None,
+    html: bool = False,
+    attachment_paths: Optional[List[str]] = None
+) -> str:
+    """Send an email notification securely using the configured SMTP app password in .env.
+    
+    Pulls credentials (app password, sender, recipient) dynamically from .env so no secrets or personal info are exposed.
+    Can be used to dispatch application alerts, interview dossiers, cover letters, or candidate updates directly to the designated email.
+    """
+    try:
+        res = email_service.send_email(
+            subject=subject,
+            body=body,
+            to_email=to_email,
+            html=html,
+            attachment_paths=attachment_paths,
+        )
+        return json.dumps(res, indent=2)
+    except Exception as e:
+        return f"Error sending email: {str(e)}"
+
+
+@mcp.tool()
+def send_interview_prep_email(
+    company_name: str,
+    role_title: Optional[str] = None,
+    to_email: Optional[str] = None
+) -> str:
+    """Analyzes the target company and job profile through native AI IDE intelligence,
+    generates a comprehensive deep-dive interview dossier (including technical questions,
+    winning talking points, coding demonstrations, leadership discovery, and reverse questions),
+    renders an IDE-styled HTML layout and PDF attachment, and securely emails it to the user.
+    """
+    try:
+        # 1. Generate full dossier intelligence
+        dossier = asyncio.run(intelligence.generate_interview_dossier(company_name, role_title=role_title))
+        if dossier.get("status") != "SUCCESS":
+            return json.dumps({"status": "error", "message": "Failed to compile dossier intelligence."})
+
+        # 2. Format rich IDE-styled HTML
+        html_content = intelligence.format_dossier_html(dossier)
+        clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', company_name.strip())
+        pdf_filename = f"{clean_name}_Comprehensive_Interview_Dossier.pdf"
+
+        # 3. Render PDF artifact
+        asyncio.run(intelligence.render_dossier_pdf(html_content, pdf_filename))
+
+        # 4. Check for cover letter to attach if present
+        attachments = [pdf_filename]
+        cl_pattern = f"Targeted_Cover_Letter_{clean_name}.pdf"
+        if os.path.isfile(cl_pattern):
+            attachments.append(cl_pattern)
+        else:
+            for f in os.listdir("."):
+                if f.startswith("Targeted_Cover_Letter_") and f.endswith(".pdf"):
+                    attachments.append(f)
+                    break
+
+        # 5. Dispatch email
+        subject = f"Deep Technical Interview Intelligence Dossier: {company_name}"
+        res = email_service.send_email(
+            subject=subject,
+            body=html_content,
+            to_email=to_email,
+            html=True,
+            attachment_paths=attachments,
+        )
+        return json.dumps({
+            "status": "success",
+            "company": company_name,
+            "role": dossier.get("role_title"),
+            "questions_prepared": len(dossier.get("high_probability_technical_questions", [])),
+            "email_dispatch": res,
+            "pdf_generated": pdf_filename
+        }, indent=2)
+    except Exception as e:
+        return f"Error executing send_interview_prep_email: {str(e)}"

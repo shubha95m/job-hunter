@@ -39,10 +39,23 @@ profiles/*.yaml
 !profiles/dummy_profile.yaml
 profile_template.yaml
 
-# Resumes and Documents (contain PII)
+# Resumes, Cover Letters, Dossiers and On-Demand Generated Documents (contain PII)
 *.pdf
 *.doc
 *.docx
+*.html
+!templates/*.html
+Targeted_Cover_Letter_*
+cover_letter*
+*Dossier*
+*dossier*
+*Interview*
+*interview*
+*Prep*
+*prep*
+*_job_summary*
 Shubham_Sharma_Staff_SDET.pdf
 Shubham_Sharma_Staff_SDET_under1mb.pdf
 Shubham_Sharma_Single_Page_CV.pdf
+
+
