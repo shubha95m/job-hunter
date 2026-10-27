@@ -1153,17 +1153,18 @@ def format_dossier_html(dossier_data: Dict[str, Any]) -> str:
         """)
 
     coding_cards_html = []
-    for c in coding_challenges:
-        cid = c.get("id", "")
-        title = c.get("title", "")
-        cat = c.get("category", "")
+    for i, c in enumerate(coding_challenges, 1):
+        cid = c.get("id") or f"CODE-{i:02d}"
+        title = c.get("title", f"Challenge #{i}")
+        cat = c.get("category", "Software Engineering")
         scenario = c.get("scenario", "")
-        fn = c.get("filename", "")
-        lang = c.get("language", "")
-        escaped_code = html_lib.escape(c.get("code", ""))
-        tc = c.get("time_complexity", "")
-        sc = c.get("space_complexity", "")
-        inv = c.get("invariants", "")
+        fn = c.get("filename") or f"{title.replace(' ', '').replace('-', '').replace('/', '_')}.java"
+        lang = c.get("language") or "Java 17 • Production Implementation"
+        raw_code = c.get("code") or c.get("code_snippet") or "// Implementation code snippet available in attached dossier."
+        escaped_code = html_lib.escape(raw_code)
+        tc = c.get("time_complexity", "O(1) to O(N)")
+        sc = c.get("space_complexity", "O(1) to O(N)")
+        inv = c.get("invariants") or c.get("key_invariants", "Production thread-safety and robust error handling.")
 
         coding_cards_html.append(f"""
         <div class="q-block" style="border-left: 4px solid #8b5cf6;">
@@ -1174,17 +1175,17 @@ def format_dossier_html(dossier_data: Dict[str, Any]) -> str:
           <div style="font-size: 13.5px; color: #334155; margin-bottom: 12px; line-height: 1.55;">
             <b>Problem Scenario & Constraints:</b> {scenario}
           </div>
-          <div class="code-editor">
-            <div class="code-header">
-              <div class="code-dots">
-                <span class="code-dot dot-red"></span>
-                <span class="code-dot dot-yellow"></span>
-                <span class="code-dot dot-green"></span>
+          <div class="code-editor" style="background: #1e1e2e; border: 1px solid #313244; border-radius: 8px; overflow: hidden; margin: 14px 0 18px 0;">
+            <div class="code-header" style="background: #181825; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #313244; font-size: 11.5px; font-family: monospace; color: #a6adc8;">
+              <div class="code-dots" style="display: flex; gap: 6px;">
+                <span class="code-dot dot-red" style="width: 10px; height: 10px; border-radius: 50%; background: #f38ba8; display: inline-block;"></span>
+                <span class="code-dot dot-yellow" style="width: 10px; height: 10px; border-radius: 50%; background: #f9e2af; display: inline-block;"></span>
+                <span class="code-dot dot-green" style="width: 10px; height: 10px; border-radius: 50%; background: #a6e3a1; display: inline-block;"></span>
               </div>
-              <span>{fn}</span>
-              <span>{lang}</span>
+              <span style="font-weight: 600; color: #cdd6f4;">{fn}</span>
+              <span style="color: #9399b2;">{lang}</span>
             </div>
-            <pre class="code-block">{escaped_code}</pre>
+            <pre class="code-block" style="background: #1e1e2e; color: #cdd6f4; font-family: 'JetBrains Mono', Consolas, Monaco, monospace; font-size: 12px; line-height: 1.55; padding: 16px; margin: 0; overflow-x: auto; white-space: pre-wrap; word-break: break-word;">{escaped_code}</pre>
           </div>
           <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; font-size: 12.5px; color: #475569;">
             <div><b>Time Complexity:</b> {tc} | <b>Space Complexity:</b> {sc}</div>
@@ -1194,14 +1195,14 @@ def format_dossier_html(dossier_data: Dict[str, Any]) -> str:
         """)
 
     managerial_cards_html = []
-    for m in managerial:
-        mid = m.get("id", "")
-        scen = m.get("scenario", "")
+    for i, m in enumerate(managerial, 1):
+        mid = m.get("id") or f"M-{i:02d}"
+        scen = m.get("scenario") or m.get("topic") or f"Scenario #{i}"
         quest = m.get("question", "")
         star = m.get("star_answer", "").replace("\n", "<br>")
         managerial_cards_html.append(f"""
         <div class="q-block" style="border-left: 4px solid #10b981;">
-          <div style="font-size: 14.5px; font-weight: 700; color: #065f46; margin-bottom: 6px;">Scenario #{mid}: {scen}</div>
+          <div style="font-size: 14.5px; font-weight: 700; color: #065f46; margin-bottom: 6px;">Leadership Scenario #{i}: {scen}</div>
           <div class="q-desc"><b>Question:</b> {quest}</div>
           <div class="q-answer" style="border-left-color: #10b981; background: #f0fdf4;">
             <b>Model STAR Leadership Response (Situation, Task, Action, Result):</b><br>
