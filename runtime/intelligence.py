@@ -653,7 +653,7 @@ async def generate_interview_dossier(
         row = cursor.fetchone()
         if not row:
             cursor.execute("""
-                SELECT id, platform, role_title, notes, location, job_url, job_key, recruiter_name, company 
+                SELECT id, platform, role_title, notes, location, job_url, job_key, company 
                 FROM wishlist 
                 WHERE company LIKE ? OR role_title LIKE ? 
                 ORDER BY id DESC LIMIT 1
@@ -662,7 +662,7 @@ async def generate_interview_dossier(
         if row:
             crm_row_id = str(row["id"]) if "id" in row.keys() else ""
             platform_source = row["platform"] or "LinkedIn"
-            recruiter_name = row["recruiter_name"] or ""
+            recruiter_name = row["recruiter_name"] if "recruiter_name" in row.keys() and row["recruiter_name"] else ""
             if "recruiter_email" in row.keys():
                 recruiter_email = row["recruiter_email"] or ""
             if not target_role:

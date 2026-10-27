@@ -925,8 +925,767 @@ def _build_sdet_qa_battery(
     yoe: float,
     web_research: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """Builds a comprehensive SDET / QA Automation battery."""
-    return _build_java_backend_battery(candidate, company, role, full_text, yoe, web_research=web_research)
+    """Builds a comprehensive Staff SDET, Quality Architecture & GenAI Tooling battery."""
+
+    # 1. 15 IN-DEPTH VERBAL & CONCEPTUAL QUESTIONS ACROSS 4 TIERS
+    verbals = [
+        # TIER 1: NEXT-GEN AUTOMATION ARCHITECTURE & BROWSER INTERNALS
+        {
+            "tier": "Next-Gen Automation Architecture",
+            "topic": "Playwright Architecture vs Selenium WebDriver & CDP Protocols",
+            "question": f"At {company}'s scale, why is the industry rapidly migrating from Selenium to Playwright? Contrast their underlying communication protocols (JSON Wire/W3C vs Chrome DevTools Protocol/WebSockets) and explain how Playwright achieves zero-flakiness through auto-waiting.",
+            "talking_points": (
+                "Selenium operates via HTTP REST requests per command through a binary driver executable (ChromeDriver), introducing network latency and race conditions. "
+                "Playwright establishes a single persistent bi-directional WebSocket connection directly to the browser process via CDP, enabling event-driven execution, network route interception, and sub-millisecond command dispatch. "
+                "Explain Playwright's auto-waiting invariants: it asserts visibility, attachability, DOM stability, and pointer readiness before firing actionability checks, eliminating arbitrary `Thread.sleep` and custom pollers."
+            )
+        },
+        {
+            "tier": "Next-Gen Automation Architecture",
+            "topic": "BrowserContext Isolation & Parallel Test Execution at Scale",
+            "question": "How does Playwright manage multi-tenant browser isolation, and how do BrowserContexts allow thousands of test cases to run in parallel without spawning multiple heavyweight browser processes?",
+            "talking_points": (
+                "Spawning a full Chromium browser instance consumes ~150-250MB RAM and takes seconds to initialize. "
+                "Playwright introduces lightweight `BrowserContext` instances—equivalent to incognito profiles—operating within a single browser process with separate cookies, local storage, cache, and session tokens. "
+                "Context creation overhead is <10ms, allowing a 16-core agent to run 32 isolated parallel tests in a single browser with negligible memory footprint."
+            )
+        },
+        {
+            "tier": "Next-Gen Automation Architecture",
+            "topic": "Shadow DOM, Canvas, and IFrame Automation Strategy",
+            "question": f"How do modern enterprise design systems encapsulate components in closed Shadow DOM or Canvas, and what architectural locator strategies do you institute across {company}'s test frameworks?",
+            "talking_points": (
+                "Playwright natively pierces Shadow DOM boundaries without custom JavaScript execution using standard CSS/text locators. "
+                "For third-party payment widgets rendered in cross-origin IFrames, explain `page.frameLocator()` chaining and cross-origin security context handling. "
+                "For HTML5 Canvas and WebGL elements, discuss visual regression testing (pixel-by-pixel snapshot comparison with diff thresholds) and coordinate-relative synthetic pointer events."
+            )
+        },
+
+        # TIER 2: API & DISTRIBUTED CONTRACT TESTING
+        {
+            "tier": "API & Distributed Systems Validation",
+            "topic": "Consumer-Driven Contract Testing (Pact) vs End-to-End Integration Tests",
+            "question": f"When validating 50+ microservices communicating via REST and Kafka at {company}, why are full end-to-end integration environments fundamentally flawed, and how does Consumer-Driven Contract Testing (Pact) solve this?",
+            "talking_points": (
+                "End-to-end multi-service test environments suffer from high maintenance cost, deployment order dependencies, shared state contamination, and slow feedback cycles. "
+                "Consumer-Driven Contract Testing (Pact) allows downstream consumer services to define expected request/response contracts and publish them to a Pact Broker. "
+                "The upstream provider verifies the contract in isolation during its pull-request build without standing up downstream dependencies, guaranteeing zero breaking API changes before production deployment."
+            )
+        },
+        {
+            "tier": "API & Distributed Systems Validation",
+            "topic": "Payment Gateway Idempotency & Concurrency Race Condition Testing",
+            "question": "How do you architect an automated test suite to verify payment idempotency under extreme concurrent race conditions where multiple identical charge requests arrive simultaneously?",
+            "talking_points": (
+                "Explain multi-threaded stress harness design using `CountDownLatch` or `CyclicBarrier` to align 50 worker threads and release them simultaneously against the payment gateway with the same `Idempotency-Key`. "
+                "Verify that exactly ONE request receives `HTTP 200/201 (Created)` and valid transaction UUID, while 49 requests receive `HTTP 409 (Conflict)` or cached duplicate response without triggering double-ledger deductions. "
+                "Verify database lock state and Redis lock expiry timing."
+            )
+        },
+        {
+            "tier": "API & Distributed Systems Validation",
+            "topic": "Kafka Asynchronous Event Validation & At-Least-Once Delivery Checks",
+            "question": "How do you automate testing for asynchronous Kafka event-driven architectures where microservices communicate via published events rather than synchronous HTTP responses?",
+            "talking_points": (
+                "Implement an asynchronous test assertion harness using `Awaitility` and embedded Kafka test consumers with unique test consumer group IDs. "
+                "Verify message payload schema evolution (Avro/Protobuf), header metadata, correlation ID propagation across distributed spans, and dead-letter queue (DLQ) routing when corrupt payloads are processed. "
+                "Test duplicate event delivery to ensure consumer idempotency."
+            )
+        },
+        {
+            "tier": "API & Distributed Systems Validation",
+            "topic": "REST Assured Framework Architecture & Circuit Breaker Interceptors",
+            "question": "Walk through your ideal enterprise REST Assured framework architecture. How do you handle authentication token rotation, response schema validation, and request/response telemetry across 5,000 automated API tests?",
+            "talking_points": (
+                "Structure base client using RequestSpecification and ResponseSpecification builders. "
+                "Implement custom `Filter` interfaces for automatic OAuth2 token acquisition and renewal with thread-safe caching, request correlation header injection, and Allure report attachment. "
+                "Validate response bodies using JSON Schema validators (`matchesJsonSchemaInClasspath`) and assert strict response SLA thresholds."
+            )
+        },
+
+        # TIER 3: GENAI TESTING, LLM TOOLING & SELF-HEALING AUTOMATION
+        {
+            "tier": "GenAI Testing & Autonomous Quality Engineering",
+            "topic": "AI-Assisted Self-Healing Test Automation & AST Mutation",
+            "question": f"At {company}, how do you leverage Generative AI and LLMs to create self-healing test frameworks, and how do you prevent hallucinations during automated failure recovery?",
+            "talking_points": (
+                "When a locator fails, the framework captures the current DOM snapshot, ancestor tree, and previous locator attributes. "
+                "A local lightweight model or fine-tuned LLM calculates structural cosine similarity and semantic tag context to propose an updated resilient locator. "
+                "To prevent hallucinations: the proposed locator must evaluate to exactly ONE element in the live DOM matching the expected role/text invariants, and an automated git pull request is created with an AST patch for human engineering review."
+            )
+        },
+        {
+            "tier": "GenAI Testing & Autonomous Quality Engineering",
+            "topic": "Validating Non-Deterministic GenAI Outputs & Semantic Drift",
+            "question": "How do you design an automated testing suite to validate LLM-driven features and AI agents where responses are non-deterministic and cannot be asserted via traditional string equality?",
+            "talking_points": (
+                "Institute a multi-layer evaluation framework: "
+                "1) Deterministic Structural Validation: JSON Schema validation, hallucinated field detection, PII leakage regex scanning. "
+                "2) Semantic Similarity Assertion: Generating text embeddings and asserting cosine distance $> 0.88$ against ground-truth golden datasets. "
+                "3) LLM-as-a-Judge Evaluation: Automated rubrics assessing Relevance, Groundedness, and Toxicity with confidence score thresholds."
+            )
+        },
+        {
+            "tier": "GenAI Testing & Autonomous Quality Engineering",
+            "topic": "Automated Test Failure Clustering via Log Embeddings",
+            "question": "When a nightly regression run of 10,000 tests yields 120 failures, how do you automate root-cause triage so engineers don't spend hours diagnosing the same underlying bug?",
+            "talking_points": (
+                "Implement an automated triage pipeline: extract stack traces, network failure logs, and browser console errors from failed test runs. "
+                "Generate vector embeddings of the error logs and apply DBSCAN clustering to group identical root causes into clusters (e.g., Cluster A: Redis auth timeout; Cluster B: Auth service 503; Cluster C: Element locator changed). "
+                "Post a single consolidated summary into Jira/Slack linking all impacted tests to the single underlying root cause."
+            )
+        },
+
+        # TIER 4: ENTERPRISE TEST INFRASTRUCTURE & CLOUD SCALE
+        {
+            "tier": "Enterprise Test Infrastructure & CI/CD",
+            "topic": "Flaky Test Elimination Algorithms & Quarantine Lifecycle",
+            "question": f"Flaky tests destroy developer trust in CI/CD pipelines. As a Staff SDET at {company}, what algorithmic strategy and quarantine lifecycle do you implement to permanently eliminate flakiness?",
+            "talking_points": (
+                "Define strict flakiness metrics: a test is flagged as flaky if it passes on retry within the same commit. "
+                "Automate test quarantining: when a test flakiness score exceeds 5% over 10 consecutive runs, automatically move it to a non-blocking `@Quarantine` suite and create a high-priority bug ticket for the authoring squad. "
+                "Establish root cause elimination: require network idle synchronization, independent test data provisioning (zero test interdependence), and state cleanup in `@AfterMethod`."
+            )
+        },
+        {
+            "tier": "Enterprise Test Infrastructure & CI/CD",
+            "topic": "Distributed Kubernetes Test Execution (Testkube / ArgoCD Quality Gates)",
+            "question": "How do you design a cloud-native testing infrastructure that can scale from 10 to 500 parallel test containers on Kubernetes during peak pull-request hours and scale to zero at night?",
+            "talking_points": (
+                "Leverage Testkube or Kubernetes Job orchestrators with KEDA (Kubernetes Event-driven Autoscaling) reacting to queue depth. "
+                "Containerize test runners with minimal alpine/distroless images pre-loaded with browser binaries and headless dependencies. "
+                "Configure test sharding across pod replicas using dynamic test distribution algorithms that balance execution duration across nodes rather than simple round-robin."
+            )
+        },
+        {
+            "tier": "Enterprise Test Infrastructure & CI/CD",
+            "topic": "Shift-Left Testing: Mutation Testing & Code Coverage Quality Bars",
+            "question": "Why is 95% line coverage often a vanity metric, and how do you institute Mutation Testing (PITest) to measure the true effectiveness of automated test suites?",
+            "talking_points": (
+                "Line coverage only indicates which lines were executed, not whether the tests made assertions that would catch bugs. "
+                "Mutation testing (e.g., PITest) intentionally introduces mutations into bytecode (inverting conditionals, altering arithmetic, mutating return values) and checks if test suites fail ('kill the mutant'). "
+                "A high Mutation Score indicates robust assertion quality, exposing tests that execute code without validating business logic."
+            )
+        },
+        {
+            "tier": "Enterprise Test Infrastructure & CI/CD",
+            "topic": "Performance & Load Testing Strategy: K6 vs JMeter in CI/CD",
+            "question": f"How do you incorporate shift-left performance testing into {company}'s CI/CD pipeline using modern tools like K6, and what threshold gates prevent latency regressions?",
+            "talking_points": (
+                "Contrast K6 (lightweight Go binary, JavaScript tests, low memory footprint, developer-friendly) with JMeter (heavyweight JVM process, XML configurations, high resource usage). "
+                "Embed K6 load tests into GitHub Actions/GitLab CI running on every pull request against staging environments with strict thresholds: `http_req_duration: ['p(95)<250', 'p(99)<500']`, `http_req_failed: ['rate<0.001']`. "
+                "Failing thresholds immediately block the merge gate."
+            )
+        },
+        {
+            "tier": "Enterprise Test Infrastructure & CI/CD",
+            "topic": "Zero-Trust Test Data Management & Synthetic Data Generation",
+            "question": f"In a highly regulated banking and payment environment like {company}, using production customer data in test environments is prohibited. How do you architect a zero-trust synthetic test data provisioning engine?",
+            "talking_points": (
+                "Implement an on-demand synthetic data generation engine combining Java Faker with state machines modeling valid customer lifecycles (KYC Approved, Card Issued, Ledger Created). "
+                "Use containerized database ephemeral clones with masked PII or instantiate dynamic SQLite/PostgreSQL instances via Testcontainers per test run. "
+                "Ensure every test case provisions its own isolated entities and tears them down, achieving total test isolation."
+            )
+        }
+    ]
+
+    # 2. 10 CONCRETE PRACTICAL CODING CHALLENGES WITH PRODUCTION IMPLEMENTATIONS
+    coding_challenges = [
+        # CHALLENGE 1
+        {
+            "id": "SDET-01",
+            "title": "Self-Healing Web Locator with Resilient DOM Traversal",
+            "category": "Playwright / Core Automation",
+            "scenario": "Implement a self-healing Playwright locator adapter in Java that intercepts locator resolution timeouts, computes Levenshtein attribute distance across visible DOM nodes, and recovers the target element dynamically.",
+            "code_snippet": """package com.visa.automation.locator;
+
+import com.microsoft.playwright.Locator;
+import com.microsoft.playwright.Page;
+import com.microsoft.playwright.options.WaitForSelectorState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
+
+public class SelfHealingLocator {
+    private static final Logger log = LoggerFactory.getLogger(SelfHealingLocator.class);
+
+    private final Page page;
+    private final String primarySelector;
+    private final String fallbackRole;
+    private final String fallbackName;
+
+    public SelfHealingLocator(Page page, String primarySelector, String fallbackRole, String fallbackName) {
+        this.page = page;
+        this.primarySelector = primarySelector;
+        this.fallbackRole = fallbackRole;
+        this.fallbackName = fallbackName;
+    }
+
+    public Locator resolve() {
+        try {
+            Locator primary = page.locator(primarySelector);
+            primary.waitFor(new Locator.WaitForOptions()
+                .setState(WaitForSelectorState.VISIBLE)
+                .setTimeout(3000));
+            return primary;
+        } catch (Exception e) {
+            log.warn("Primary locator '{}' failed! Initiating self-healing fallback...", primarySelector);
+            return healLocator();
+        }
+    }
+
+    private Locator healLocator() {
+        // Fallback 1: Semantic ARIA accessibility role matching
+        Locator ariaLocator = page.getByRole(
+            com.microsoft.playwright.options.AriaRole.valueOf(fallbackRole.toUpperCase()),
+            new Page.GetByRoleOptions().setName(fallbackName)
+        );
+        if (ariaLocator.count() == 1) {
+            log.info("Self-healed element via ARIA Role: {} ['{}']", fallbackRole, fallbackName);
+            return ariaLocator;
+        }
+
+        // Fallback 2: Exact text with button/interactive ancestor
+        Locator textLocator = page.locator(String.format("button:has-text('%s'), a:has-text('%s')", fallbackName, fallbackName));
+        if (textLocator.count() > 0) {
+            log.info("Self-healed element via Text-Has locator: {}", fallbackName);
+            return textLocator.first();
+        }
+
+        throw new RuntimeException("Self-healing failed: No resilient fallback located for " + primarySelector);
+    }
+}""",
+            "time_complexity": "O(1) on happy path; O(K) where K is matching DOM elements during healing",
+            "space_complexity": "O(1) memory overhead",
+            "key_invariants": "Guarantees zero brittle test failures when UI classes change, asserting exactly one unambiguous element before click action."
+        },
+
+        # CHALLENGE 2
+        {
+            "id": "SDET-02",
+            "title": "Thread-Safe Test Account Leasing Pool with ReentrantLock",
+            "category": "Concurrency & Test Data Management",
+            "scenario": "Implement a high-performance thread-safe Test Account Pool where concurrent parallel test threads can lease a payment account with balance, hold it exclusively, and return it safely upon test completion.",
+            "code_snippet": """package com.visa.automation.pool;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class TestAccountPool {
+    private final Queue<String> availableAccounts = new LinkedList<>();
+    private final Set<String> leasedAccounts = ConcurrentHashMap.newKeySet();
+    private final ReentrantLock lock = new ReentrantLock(true);
+    private final Condition notEmpty = lock.newCondition();
+
+    public TestAccountPool(List<String> initialAccounts) {
+        availableAccounts.addAll(initialAccounts);
+    }
+
+    public String leaseAccount(Duration timeout) throws InterruptedException {
+        long nanos = timeout.toNanos();
+        lock.lock();
+        try {
+            while (availableAccounts.isEmpty()) {
+                if (nanos <= 0L) {
+                    throw new RuntimeException("Timeout acquiring test account from pool!");
+                }
+                nanos = notEmpty.awaitNanos(nanos);
+            }
+            String account = availableAccounts.poll();
+            leasedAccounts.add(account);
+            return account;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void releaseAccount(String account) {
+        lock.lock();
+        try {
+            if (leasedAccounts.remove(account)) {
+                availableAccounts.offer(account);
+                notEmpty.signal();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+}""",
+            "time_complexity": "O(1) lease and release operations",
+            "space_complexity": "O(N) where N is number of pooled accounts",
+            "key_invariants": "Prevents cross-test data collision during parallel execution; fair lock prevents thread starvation."
+        },
+
+        # CHALLENGE 3
+        {
+            "id": "SDET-03",
+            "title": "RestAssured Request Filter with Idempotency Injection & SLA Assertion",
+            "category": "API Framework / RestAssured",
+            "scenario": "Write a custom RestAssured Filter that dynamically injects a unique UUID Idempotency-Key header, logs request/response telemetry, and asserts strict HTTP response latency SLAs.",
+            "code_snippet": """package com.visa.automation.filter;
+
+import io.restassured.filter.Filter;
+import io.restassured.filter.FilterContext;
+import io.restassured.response.Response;
+import io.restassured.specification.FilterableRequestSpecification;
+import io.restassured.specification.FilterableResponseSpecification;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.UUID;
+
+public class ResilientApiFilter implements Filter {
+    private static final Logger log = LoggerFactory.getLogger(ResilientApiFilter.class);
+    private final long maxResponseTimeMillis;
+
+    public ResilientApiFilter(long maxResponseTimeMillis) {
+        this.maxResponseTimeMillis = maxResponseTimeMillis;
+    }
+
+    @Override
+    public Response filter(FilterableRequestSpecification requestSpec,
+                           FilterableResponseSpecification responseSpec,
+                           FilterContext ctx) {
+        String idempotencyKey = UUID.randomUUID().toString();
+        requestSpec.header("X-Idempotency-Key", idempotencyKey);
+        requestSpec.header("X-Correlation-ID", UUID.randomUUID().toString());
+
+        long startTime = System.currentTimeMillis();
+        Response response = ctx.next(requestSpec, responseSpec);
+        long duration = System.currentTimeMillis() - startTime;
+
+        log.info("API [{}] {} returned Status: {} in {}ms (IdempotencyKey: {})",
+            requestSpec.getMethod(), requestSpec.getURI(), response.getStatusCode(), duration, idempotencyKey);
+
+        if (duration > maxResponseTimeMillis) {
+            throw new AssertionError(String.format(
+                "SLA Breach! API [%s] %s took %dms exceeding limit of %dms",
+                requestSpec.getMethod(), requestSpec.getURI(), duration, maxResponseTimeMillis
+            ));
+        }
+        return response;
+    }
+}""",
+            "time_complexity": "O(1) header manipulation & timing calculation",
+            "space_complexity": "O(1) memory overhead",
+            "key_invariants": "Enforces enterprise API performance standards and guarantees idempotency key tracing on every call."
+        },
+
+        # CHALLENGE 4
+        {
+            "id": "SDET-04",
+            "title": "Sliding-Window Flaky Test Detector & Circuit Breaker",
+            "category": "Test Reliability Algorithms",
+            "scenario": "Implement an in-memory sliding-window test flakiness tracker that evaluates the last N test runs and flags tests for quarantine if their flakiness ratio exceeds a configurable threshold.",
+            "code_snippet": """package com.visa.automation.flaky;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class FlakyTestDetector {
+    private final int windowSize;
+    private final double failureThreshold;
+    private final Map<String, Deque<Boolean>> testHistory = new ConcurrentHashMap<>();
+
+    public FlakyTestDetector(int windowSize, double failureThreshold) {
+        this.windowSize = windowSize;
+        this.failureThreshold = failureThreshold;
+    }
+
+    public synchronized boolean recordResult(String testId, boolean passed) {
+        Deque<Boolean> history = testHistory.computeIfAbsent(testId, k -> new ArrayDeque<>());
+        if (history.size() >= windowSize) {
+            history.pollFirst();
+        }
+        history.addLast(passed);
+
+        if (history.size() < windowSize) {
+            return false; // Not enough data points
+        }
+
+        long failCount = history.stream().filter(result -> !result).count();
+        double failureRate = (double) failCount / windowSize;
+        return failureRate >= failureThreshold;
+    }
+
+    public synchronized double getFlakinessRate(String testId) {
+        Deque<Boolean> history = testHistory.get(testId);
+        if (history == null || history.isEmpty()) return 0.0;
+        long failCount = history.stream().filter(r -> !r).count();
+        return (double) failCount / history.size();
+    }
+}""",
+            "time_complexity": "O(W) per evaluation where W is window size (e.g., W=10)",
+            "space_complexity": "O(T * W) where T is total distinct tests",
+            "key_invariants": "Prevents flaky tests from blocking releases by isolating unreliable suites automatically."
+        },
+
+        # CHALLENGE 5
+        {
+            "id": "SDET-05",
+            "title": "Lightweight Mock Payment Webhook Dispatcher",
+            "category": "Service Virtualization / Mocking",
+            "scenario": "Implement an asynchronous mock server callback dispatcher in Java that accepts incoming payment webhook registrations and triggers verified callbacks with exponential backoff.",
+            "code_snippet": """package com.visa.automation.mock;
+
+import java.net.URI;
+import java.net.http.*;
+import java.time.Duration;
+import java.util.concurrent.*;
+
+public class MockWebhookDispatcher {
+    private final HttpClient httpClient = HttpClient.newBuilder()
+        .connectTimeout(Duration.ofSeconds(3))
+        .build();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
+
+    public CompletableFuture<HttpResponse<String>> dispatchWebhookAsync(
+            String callbackUrl, String jsonPayload, int delaySeconds) {
+        
+        CompletableFuture<HttpResponse<String>> promise = new CompletableFuture<>();
+
+        scheduler.schedule(() -> {
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(callbackUrl))
+                .header("Content-Type", "application/json")
+                .header("X-Mock-Provider", "Visa-Quality-Harness")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                .build();
+
+            httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenAccept(promise::complete)
+                .exceptionally(ex -> {
+                    promise.completeExceptionally(ex);
+                    return null;
+                });
+        }, delaySeconds, TimeUnit.SECONDS);
+
+        return promise;
+    }
+}""",
+            "time_complexity": "O(1) task scheduling and async HTTP dispatch",
+            "space_complexity": "O(M) where M is pending scheduled callbacks",
+            "key_invariants": "Decouples tests from external banking webhooks, allowing deterministic verification of asynchronous payment settlement."
+        },
+
+        # CHALLENGE 6
+        {
+            "id": "SDET-06",
+            "title": "Playwright Network Route Interceptor for Mocking & Failure Injection",
+            "category": "Playwright / Network Mocking",
+            "scenario": "Implement a Playwright Network Interceptor that mocks third-party 3DS verification endpoints and injects simulated HTTP 504 Gateway Timeouts to validate UI error banner recovery.",
+            "code_snippet": """package com.visa.automation.interceptor;
+
+import com.microsoft.playwright.Page;
+import com.microsoft.playwright.Route;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class NetworkFailureInterceptor {
+
+    public static void injectGatewayTimeout(Page page, String endpointPattern) {
+        page.route(endpointPattern, route -> {
+            route.fulfill(new Route.FulfillOptions()
+                .setStatus(504)
+                .setContentType("application/json")
+                .setBody("{\"error\": \"GATEWAY_TIMEOUT\", \"message\": \"Payment provider timed out.\"}"));
+        });
+    }
+
+    public static void mockSuccessfulVerification(Page page, String endpointPattern, String transactionId) {
+        page.route(endpointPattern, route -> {
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Content-Type", "application/json");
+
+            String mockBody = String.format(
+                "{\"status\": \"APPROVED\", \"transactionId\": \"%s\", \"authCode\": \"AUTH_99211\"}",
+                transactionId
+            );
+
+            route.fulfill(new Route.FulfillOptions()
+                .setStatus(200)
+                .setHeaders(headers)
+                .setBody(mockBody));
+        });
+    }
+}""",
+            "time_complexity": "O(1) route handler intercept",
+            "space_complexity": "O(1) memory overhead",
+            "key_invariants": "Enables chaos engineering and resilience testing directly inside browser end-to-end runs."
+        },
+
+        # CHALLENGE 7
+        {
+            "id": "SDET-07",
+            "title": "High-Throughput Parallel API Test Runner with Semaphore Concurrency Limiter",
+            "category": "Concurrency & Concurrency Limiting",
+            "scenario": "Write a parallel API test executor that runs 1,000 test cases using CompletableFuture, constrained by a Semaphore to ensure no more than 20 concurrent HTTP requests overwhelm the target environment.",
+            "code_snippet": """package com.visa.automation.runner;
+
+import java.util.List;
+import java.util.concurrent.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+public class BoundedParallelTestRunner {
+    private final Semaphore semaphore;
+    private final ExecutorService executor;
+
+    public BoundedParallelTestRunner(int maxConcurrency) {
+        this.semaphore = new Semaphore(maxConcurrency);
+        this.executor = Executors.newFixedThreadPool(maxConcurrency);
+    }
+
+    public <T, R> List<R> runAll(List<T> testInputs, Function<T, R> testFunction) {
+        List<CompletableFuture<R>> futures = testInputs.stream()
+            .map(input -> CompletableFuture.supplyAsync(() -> {
+                try {
+                    semaphore.acquire();
+                    return testFunction.apply(input);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Test interrupted", e);
+                } finally {
+                    semaphore.release();
+                }
+            }, executor))
+            .collect(Collectors.toList());
+
+        return futures.stream()
+            .map(CompletableFuture::join)
+            .collect(Collectors.toList());
+    }
+
+    public void shutdown() {
+        executor.shutdown();
+    }
+}""",
+            "time_complexity": "O(N / C) where N is number of tests and C is maxConcurrency limit",
+            "space_complexity": "O(N) futures list",
+            "key_invariants": "Strictly bounds client-side socket creation and target server load."
+        },
+
+        # CHALLENGE 8
+        {
+            "id": "SDET-08",
+            "title": "GenAI Output Semantic & Structural Validator",
+            "category": "GenAI Testing / Validation",
+            "scenario": "Implement a Java validator that parses LLM responses, validates strict JSON schema formatting, verifies zero PII token leakage (PAN/SSN), and computes word token coverage against required keywords.",
+            "code_snippet": """package com.visa.automation.genai;
+
+import java.util.*;
+import java.util.regex.Pattern;
+
+public class GenAiResponseValidator {
+    private static final Pattern CREDIT_CARD_REGEX = Pattern.compile("\\\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14})\\\\b");
+    private static final Pattern SSN_REGEX = Pattern.compile("\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b");
+
+    public static class ValidationReport {
+        public boolean passed;
+        public List<String> violations = new ArrayList<>();
+        public double keywordCoverage;
+    }
+
+    public ValidationReport validate(String llmOutput, Set<String> mandatoryKeywords) {
+        ValidationReport report = new ValidationReport();
+
+        // 1. PII Leakage Check
+        if (CREDIT_CARD_REGEX.matcher(llmOutput).find()) {
+            report.violations.add("CRITICAL: Credit card number detected in LLM response!");
+        }
+        if (SSN_REGEX.matcher(llmOutput).find()) {
+            report.violations.add("CRITICAL: SSN pattern detected in LLM response!");
+        }
+
+        // 2. Keyword Coverage Check
+        long matched = mandatoryKeywords.stream()
+            .filter(kw -> llmOutput.toLowerCase().contains(kw.toLowerCase()))
+            .count();
+        report.keywordCoverage = (double) matched / mandatoryKeywords.size();
+        if (report.keywordCoverage < 0.80) {
+            report.violations.add(String.format("Keyword coverage %.2f%% below minimum 80%% threshold", report.keywordCoverage * 100));
+        }
+
+        report.passed = report.violations.isEmpty();
+        return report;
+    }
+}""",
+            "time_complexity": "O(L + K) where L is length of output and K is keyword count",
+            "space_complexity": "O(1) memory overhead",
+            "key_invariants": "Prevents catastrophic compliance breaches (PII leakage) in enterprise GenAI pipelines."
+        },
+
+        # CHALLENGE 9
+        {
+            "id": "SDET-09",
+            "title": "Concurrent Payment Idempotency Multi-Threaded Test Harness",
+            "category": "Distributed Systems Testing",
+            "scenario": "Implement an automated test harness that spawns 50 concurrent threads submitting identical payment requests with the same Idempotency Key, asserting that exactly one succeeds and 49 receive cached/conflict responses.",
+            "code_snippet": """package com.visa.automation.concurrency;
+
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class ConcurrentIdempotencyTestHarness {
+
+    public static class HarnessResult {
+        public int successCount;
+        public int conflictOrCachedCount;
+        public int unexpectedFailureCount;
+    }
+
+    public HarnessResult executeConcurrentDuplicateRequests(int threadCount, String idempotencyKey, Callable<Integer> requestCallable) throws InterruptedException {
+        CountDownLatch startGate = new CountDownLatch(1);
+        CountDownLatch endGate = new CountDownLatch(threadCount);
+        ExecutorService pool = Executors.newFixedThreadPool(threadCount);
+
+        AtomicInteger successes = new AtomicInteger();
+        AtomicInteger conflicts = new AtomicInteger();
+        AtomicInteger others = new AtomicInteger();
+
+        for (int i = 0; i < threadCount; i++) {
+            pool.submit(() -> {
+                try {
+                    startGate.await(); // Align all threads at starting line
+                    int statusCode = requestCallable.call();
+                    if (statusCode == 200 || statusCode == 201) {
+                        successes.incrementAndGet();
+                    } else if (statusCode == 409 || statusCode == 400) {
+                        conflicts.incrementAndGet();
+                    } else {
+                        others.incrementAndGet();
+                    }
+                } catch (Exception e) {
+                    others.incrementAndGet();
+                } finally {
+                    endGate.countDown();
+                }
+            });
+        }
+
+        startGate.countDown(); // Fire all requests simultaneously
+        endGate.await(10, TimeUnit.SECONDS);
+        pool.shutdown();
+
+        HarnessResult result = new HarnessResult();
+        result.successCount = successes.get();
+        result.conflictOrCachedCount = conflicts.get();
+        result.unexpectedFailureCount = others.get();
+        return result;
+    }
+}""",
+            "time_complexity": "O(T) execution where T is threadCount",
+            "space_complexity": "O(T) thread pool allocation",
+            "key_invariants": "Guarantees zero double-charge defects in high-volume payment microservices."
+        },
+
+        # CHALLENGE 10
+        {
+            "id": "SDET-10",
+            "title": "Testkube / Kubernetes Custom Test Pod Lifecycle Controller",
+            "category": "Cloud Infrastructure & Orchestration",
+            "scenario": "Write a Kubernetes Job status observer in Java that monitors headless test container pods, extracts pod container termination exit codes, and fetches failed container logs for CI/CD failure artifacts.",
+            "code_snippet": """package com.visa.automation.k8s;
+
+import java.util.List;
+
+public class K8sTestPodObserver {
+
+    public record PodResult(String podName, int exitCode, String failureLog) {}
+
+    public static PodResult evaluateTestPodStatus(String podName, int exitCode, List<String> stdoutLines) {
+        if (exitCode == 0) {
+            return new PodResult(podName, 0, "TESTS_PASSED");
+        }
+
+        // Extract last 15 lines of error logs from container stdout
+        int startIndex = Math.max(0, stdoutLines.size() - 15);
+        List<String> tailLogs = stdoutLines.subList(startIndex, stdoutLines.size());
+        String consolidatedError = String.join("\\n", tailLogs);
+
+        return new PodResult(podName, exitCode, consolidatedError);
+    }
+}""",
+            "time_complexity": "O(L) where L is log size",
+            "space_complexity": "O(L) memory footprint",
+            "key_invariants": "Enables automated CI/CD pipeline diagnosis without human kubectl intervention."
+        }
+    ]
+
+    # 3. 5 MANAGERIAL / BEHAVIORAL QUESTIONS WITH STAR METHODOLOGY
+    managerial = [
+        {
+            "question": f"At {company}, how do you handle intense pressure from Engineering Managers to release a feature when automated test gates are failing due to a potential edge-case bug?",
+            "star_answer": (
+                "**Situation:** During a quarterly release at AlphaSense, a core search microservice upgrade failed 3 automated concurrency tests under high-load simulation 4 hours before the production deployment window.\n"
+                "**Task:** Product and Dev leads insisted on bypassing the test gate, asserting it was an 'unrealistic edge case'. As Staff SDET, I had to safeguard production stability without blocking business velocity unnecessarily.\n"
+                "**Action:** I isolated the failing scenario into a 10-line reproducible curl script and proved that under concurrent thread execution, user query sessions leaked into neighboring client tenants. Seeing the multi-tenant data contamination risk, leadership immediately agreed to delay by 24 hours.\n"
+                "**Result:** Dev squad patched the thread-local state leak. The release went out the following morning with zero production Sev-1 incidents."
+            )
+        },
+        {
+            "question": "How do you institute a cultural shift across a 100-developer engineering organization from 'testing is QA's job' to true Shift-Left Quality Engineering?",
+            "star_answer": (
+                "**Situation:** Development teams were throwing untested feature PRs over the fence to QA, causing 3-week regression testing cycles and release bottlenecks.\n"
+                "**Task:** Spearhead an organizational transformation making developers co-owners of automated quality.\n"
+                "**Action:** I built a local pre-commit hook using Playwright and Testcontainers that ran smoke suites in <45 seconds on developers' laptops. I instituted PR quality gates requiring mutation tests on new business logic, and ran weekly 'Quality Champion' brown-bag sessions teaching devs how to write resilient test fixtures.\n"
+                "**Result:** PR rejection rates dropped by 65%, regression test cycle time compressed from 3 weeks to 3 hours, and team morale skyrocketed."
+            )
+        },
+        {
+            "question": "Walk me through how you handled a Sev-1 production outage caused by a missed regression in automated testing suites.",
+            "star_answer": (
+                "**Situation:** An e-commerce payment endpoint experienced an outage after a Friday evening deployment because a new HTTP 429 Rate-Limit response was not recognized by downstream mobile clients.\n"
+                "**Task:** Lead post-incident triage, determine test coverage gaps, and prevent recurrence.\n"
+                "**Action:** During the blameless post-mortem, I identified that integration tests only asserted HTTP 200 and HTTP 500, with zero coverage for HTTP 429 response contracts. I wrote an automated Chaos Engineering test in K6 simulating upstream rate-limiting, added Contract Tests in Pact to validate mobile client response handling, and updated the PR gate.\n"
+                "**Result:** We eliminated this defect class permanently and achieved 99.99% payment endpoint reliability for the subsequent 4 quarters."
+            )
+        },
+        {
+            "question": "How do you mentor and level-up mid-level QA engineers who are stuck in manual testing or basic scripting to become quality architects?",
+            "star_answer": (
+                "**Situation:** Several manual QAs felt left behind as our organization migrated toward cloud-native microservices and Playwright.\n"
+                "**Task:** Upskill 6 QA engineers into autonomous SDETs capable of designing frameworks and CI/CD pipelines.\n"
+                "**Action:** I created a structured 12-week internal Quality Engineering curriculum covering Java/Python data structures, Playwright internals, Docker/Kubernetes basics, and Git workflows. I paired with each engineer weekly, reviewing their PRs with detailed pedagogical feedback.\n"
+                "**Result:** Within 6 months, all 6 engineers transitioned to full-time SDET roles, collectively authoring over 1,500 automated tests and earning promotions."
+            )
+        },
+        {
+            "question": f"How do you evaluate and introduce Generative AI and LLM tooling into {company}'s quality organization without introducing security or hallucination risks?",
+            "star_answer": (
+                "**Situation:** Leadership wanted to adopt GenAI to accelerate test generation, but legal and engineering compliance strictly prohibited sending proprietary code or customer payloads to public cloud LLMs.\n"
+                "**Task:** Design a secure, hallucination-resistant GenAI quality platform.\n"
+                "**Action:** I architected an on-premise / VPC-contained AI test engine using local open-source LLMs connected via Model Context Protocol (MCP). The tool ingested API OpenAPI/Swagger specs to automatically draft RestAssured test skeletons, accompanied by a deterministic AST validator that verified all generated code compiled and asserted real schemas.\n"
+                "**Result:** Automated test drafting velocity increased by 40% while maintaining 100% data privacy compliance."
+            )
+        }
+    ]
+
+    # 4. 3 STRATEGIC REVERSE-INTERVIEW QUESTIONS FOR LEADERSHIP
+    reverse = [
+        f"At {company}'s transaction volume, what is the current state of consumer-driven contract testing between the payment authorization squads and third-party banking networks?",
+        f"How does engineering leadership at {company} balance the speed of automated pull-request releases against the compute cost of running thousands of distributed test containers on Kubernetes?",
+        f"With {company}'s strategic emphasis on Generative AI tooling, what has been the biggest architectural bottleneck in adopting autonomous agentic testing across legacy banking backbones?"
+    ]
+
+    return {
+        "verbal_questions": verbals,
+        "coding_challenges": coding_challenges,
+        "managerial_questions": managerial,
+        "reverse_questions": reverse,
+        "verified_rounds": web_research.get("verified_rounds", []) if web_research else [],
+        "real_coding_patterns_reported": web_research.get("real_coding_patterns_reported", []) if web_research else [],
+        "real_system_design_scenarios": web_research.get("real_system_design_scenarios", []) if web_research else [],
+        "location_specific_insights": web_research.get("location_specific_insights", "") if web_research else "",
+        "web_research_grounded": True if web_research and web_research.get("status") == "SUCCESS" else False
+    }
 
 
 def _build_general_backend_battery(
