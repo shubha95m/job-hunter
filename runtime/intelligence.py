@@ -568,21 +568,25 @@ def generate_targeted_cover_letter(
             f.write(html_content)
 
         if output_format.lower() == "pdf":
-            async def _render_pdf():
-                from playwright.async_api import async_playwright
-                async with async_playwright() as p:
-                    browser = await p.chromium.launch(headless=True)
-                    page = await browser.new_page()
-                    await page.goto(f"file://{html_path}", wait_until="networkidle")
-                    await page.pdf(
+            import concurrent.futures
+            from playwright.sync_api import sync_playwright
+
+            def _render_pdf_sync():
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=True)
+                    page = browser.new_page()
+                    page.goto(f"file://{html_path}", wait_until="networkidle")
+                    page.pdf(
                         path=str(pdf_path),
                         format="A4",
                         print_background=True,
                         margin={"top": "12mm", "bottom": "12mm", "left": "15mm", "right": "15mm"}
                     )
-                    await browser.close()
+                    browser.close()
 
-            asyncio.run(_render_pdf())
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                fut = pool.submit(_render_pdf_sync)
+                fut.result()
 
             # Verification of strict single-page rule
             reader = pypdf.PdfReader(str(pdf_path))
@@ -779,6 +783,19 @@ async def generate_interview_dossier(
             "recent_events": "Selected by HSBC to lead critical wealth management and transactional core banking modernizations in Pune.",
             "upcoming_events": "Expanding hybrid engineering pods in Kalyani Nagar Pune for high-concurrency microservices and financial gateway integrations.",
             "tech_stack": "Java 17/11, Spring Boot, Spring Data JPA, Microservices, Redis Caching, Kubernetes, Concurrency & Transaction Management (@Transactional), Resilience4j."
+        },
+        "thoughtworks": {
+            "type": "Tier-1 Global Software Consultancy & Digital Transformation Leader",
+            "headquarters": "Chicago, Illinois, US / Pune Tech Centre (Yerwada, Pune, India)",
+            "founded": "1993",
+            "founders": "Neville Roy Singham",
+            "ceo": "Mike Sutcliff",
+            "cto": "Rachel Laycock",
+            "stage": "Public (NASDAQ: TWKS) | Globally Renowned Engineering Vanguard",
+            "ratings": "4.2/5 (Glassdoor) | Benchmark for Clean Code, TDD, Pair Programming & 90%+ Fixed Pay",
+            "recent_events": "Published Thoughtworks Technology Radar Vol. 30; expanding enterprise GenAI engineering, digital platform modernization, and core banking cloud migration client pods.",
+            "upcoming_events": "Thoughtworks XConf India; scaling Pune consultant pods for event-driven microservices, distributed systems, and financial platform modernization.",
+            "tech_stack": "Java 17/21, Spring Boot, Microservices, Apache Kafka, Redis, PostgreSQL, Kubernetes, Docker, TDD (JUnit 5 / Mockito), Clean Architecture, Hexagonal Design, CI/CD."
         }
     }
 
